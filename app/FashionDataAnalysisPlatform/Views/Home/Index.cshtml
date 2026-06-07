@@ -1,0 +1,67 @@
+﻿@{
+    ViewData["Title"] = "Dashboard";
+}
+
+<h2>Dashboard</h2>
+
+<hr />
+
+<!-- STORE FILTER -->
+<form method="get">
+    <div style="margin-bottom:20px;">
+        <label><strong>Select Store:</strong></label>
+        <select name="storeId" onchange="this.form.submit()" class="form-control" style="width:300px;">
+            <option value="">All Stores</option>
+
+            @foreach (var store in ViewBag.Stores)
+            {
+                    <option value="@store.StoreId"
+                            selected="@(ViewBag.SelectedStoreId == store.StoreId ? "selected" : null)">
+                    @store.StoreName
+                    </option>
+            }
+        </select>
+    </div>
+</form>
+
+<hr />
+
+<!-- KPI CARDS -->
+<div class="row">
+
+    <div class="col-md-4">
+        <div class="card" style="padding:20px; margin-bottom:20px;">
+            <h4>Total Revenue</h4>
+            <h2>@ViewBag.TotalRevenue.ToString("C")</h2>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card" style="padding:20px; margin-bottom:20px;">
+            <h4>Total Orders</h4>
+            <h2>@ViewBag.TotalOrders</h2>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card" style="padding:20px; margin-bottom:20px;">
+            <h4>Total Units Sold</h4>
+            <h2>@ViewBag.TotalUnits</h2>
+        </div>
+    </div>
+
+</div>
+
+<hr />
+
+<!-- INFO -->
+<p style="color:gray;">
+    Data is automatically synchronized every 5 seconds from connected store APIs.
+</p>
+
+<!-- AUTO REFRESH -->
+<script>
+    setTimeout(function () {
+        location.reload();
+    }, 5000);
+</script>

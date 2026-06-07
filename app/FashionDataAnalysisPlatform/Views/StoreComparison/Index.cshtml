@@ -1,0 +1,659 @@
+@{
+    ViewData["Title"] = "Store Comparison";
+    var dateRange = ViewBag.DateRange as string ?? "all";
+    var storeData = ViewBag.StoreData     as string ?? "[]";
+    var storeList = ViewBag.StoreList     as string ?? "[]";
+    var insights  = ViewBag.SmartInsights as string ?? "[]";
+    var noStores  = (bool?)ViewBag.NoStores == true;
+
+    string dateRangeLabel = dateRange switch {
+        "7d"  => "Last 7 Days",
+        "30d" => "Last 30 Days",
+        "90d" => "Last 90 Days",
+        "12m" => "Last 12 Months",
+        "all" => "All Time",
+        _     => "All Time"
+    };
+}
+
+<!-- ══════════════════════════════════════════════════════════════════
+     PAGE HEADER
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="dash-header">
+    <div>
+        <h1 class="dash-title">Store Comparison</h1>
+        <p class="dash-subtitle">Benchmark connected stores across revenue, profitability, customer value and inventory performance.</p>
+    </div>
+    <div class="dash-actions">
+
+        <div class="dropdown">
+            <button class="date-range-btn dropdown-toggle" type="button"
+                    data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="fa-regular fa-calendar"></i>
+                @dateRangeLabel
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end shadow-sm border"
+                style="min-width:170px; border-radius:12px; padding:6px; font-size:13px;">
+                <li><a class="dropdown-item dr-item @(dateRange=="7d" ?"active":"")"  href="javascript:void(0)" onclick="setDateRange('7d')">Last 7 Days</a></li>
+                <li><a class="dropdown-item dr-item @(dateRange=="30d"?"active":"")"  href="javascript:void(0)" onclick="setDateRange('30d')">Last 30 Days</a></li>
+                <li><a class="dropdown-item dr-item @(dateRange=="90d"?"active":"")"  href="javascript:void(0)" onclick="setDateRange('90d')">Last 90 Days</a></li>
+                <li><a class="dropdown-item dr-item @(dateRange=="12m"?"active":"")"  href="javascript:void(0)" onclick="setDateRange('12m')">Last 12 Months</a></li>
+                <li><hr class="dropdown-divider my-1"></li>
+                <li><a class="dropdown-item dr-item @(dateRange=="all"?"active":"")"  href="javascript:void(0)" onclick="setDateRange('all')">All Time</a></li>
+            </ul>
+        </div>
+
+        <a href="#" class="export-btn">
+            <i class="fa-solid fa-arrow-up-from-bracket"></i> Export
+        </a>
+
+    </div>
+</div>
+
+@if (noStores)
+{
+    <div class="card" style="padding:48px; text-align:center;">
+        <i class="fa-solid fa-building" style="font-size:40px; color:var(--border); margin-bottom:16px; display:block;"></i>
+        <p style="color:var(--muted); font-size:15px; margin:0;">No stores connected. Add stores via Store Connections to start comparing.</p>
+    </div>
+}
+else
+{
+
+<!-- ══════════════════════════════════════════════════════════════════
+     COMPARE STORES SELECTOR
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="sc-selector-bar mb-4">
+    <div class="sc-selector-label">
+        <i class="fa-solid fa-code-compare"></i>
+        <span>Compare Stores</span>
+    </div>
+    <div class="sc-store-pills" id="storePillsContainer"></div>
+    <div class="sc-min-notice" id="minNotice" style="display:none;">
+        <i class="fa-solid fa-circle-info"></i>
+        Select at least two stores to compare performance.
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     STORE SUMMARY CARDS — hero section
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="sc-store-cards-grid" id="storeCardsGrid"></div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     ROW 1 — Revenue vs Profit Margin (executive comparison, full width)
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="row g-4 mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <div>
+                    <div class="chart-card-title">Revenue vs Profit Margin</div>
+                    <div class="chart-card-subtitle">Compare store scale (revenue) and profitability (margin) in a single view</div>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="chart-wrap" style="height:280px;">
+                    <canvas id="execChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     ROW 2 — Sales Channel Mix | Performance Profile
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="row g-4 mb-4">
+    <div class="col-lg-7">
+        <div class="card h-100">
+            <div class="card-header">
+                <div class="chart-card-title">Sales Channel Mix</div>
+                <div class="chart-card-subtitle">Revenue share by channel — Online, Mobile, Physical</div>
+            </div>
+            <div class="card-body">
+                <div class="chart-wrap" style="height:268px;">
+                    <canvas id="channelChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="card h-100">
+            <div class="card-header">
+                <div class="chart-card-title">Performance Profile</div>
+                <div class="chart-card-subtitle">Normalised across Revenue, Orders, AOV, Margin, Turnover</div>
+            </div>
+            <div class="card-body d-flex align-items-center justify-content-center" style="padding-top:12px; padding-bottom:20px;">
+                <div style="width:100%; max-width:320px;">
+                    <canvas id="radarChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     ROW 3 — Inventory Value | Inventory Risk
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="row g-4 mb-4">
+    <div class="col-lg-7">
+        <div class="card h-100">
+            <div class="card-header">
+                <div class="chart-card-title">Inventory Value</div>
+                <div class="chart-card-subtitle">Total inventory value at retail price per store</div>
+            </div>
+            <div class="card-body">
+                <div class="chart-wrap" style="height:240px;">
+                    <canvas id="invValueChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="card h-100">
+            <div class="card-header">
+                <div class="chart-card-title">Inventory Risk</div>
+                <div class="chart-card-subtitle">Turnover, low stock, dead stock and out-of-stock by store</div>
+            </div>
+            <div class="card-body p-0">
+                <div id="invRiskContainer"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     ROW 4 — Store Ranking Table
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="row g-4 mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <div>
+                    <div class="chart-card-title">Store Ranking</div>
+                    <div class="chart-card-subtitle">Sorted by revenue — all selected stores</div>
+                </div>
+                <span class="sc-badge" id="rankingBadge">— stores</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="sc-table">
+                        <thead>
+                            <tr>
+                                <th style="width:44px;">#</th>
+                                <th>Store</th>
+                                <th class="text-end">Revenue</th>
+                                <th class="text-end">Orders</th>
+                                <th class="text-end">AOV</th>
+                                <th class="text-end">Gross Profit</th>
+                                <th class="text-end">Margin</th>
+                                <th class="text-end">Inv. Turnover</th>
+                                <th class="text-end">Low Stock</th>
+                            </tr>
+                        </thead>
+                        <tbody id="rankingBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     ROW 5 — Smart Store Insights
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="row g-4 mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <div>
+                    <div class="chart-card-title">Smart Store Insights</div>
+                    <div class="chart-card-subtitle">Rule-based analysis from real store data</div>
+                </div>
+                <span class="sc-badge" id="insightsBadge">— insights</span>
+            </div>
+            <div class="card-body">
+                <div class="sc-insights-grid" id="insightsGrid"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+} <!-- end noStores else -->
+
+@section Scripts {
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+// ── Server data ──────────────────────────────────────────────────────
+const ALL_STORES   = @Html.Raw(storeList);
+const ALL_DATA     = @Html.Raw(storeData);
+const ALL_INSIGHTS = @Html.Raw(insights);
+
+// ── Design tokens ────────────────────────────────────────────────────
+const PALETTE = [
+    '#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6',
+    '#14b8a6','#f97316','#3b82f6','#ec4899','#84cc16'
+];
+const PALETTE_SOFT = [
+    'rgba(99,102,241,.14)','rgba(16,185,129,.14)','rgba(245,158,11,.14)',
+    'rgba(239,68,68,.14)', 'rgba(139,92,246,.14)','rgba(20,184,166,.14)',
+    'rgba(249,115,22,.14)','rgba(59,130,246,.14)', 'rgba(236,72,153,.14)',
+    'rgba(132,204,22,.14)'
+];
+const BORDER_CLR = '#e8ecf2';
+const gridOpts   = { color: BORDER_CLR, lineWidth: 1 };
+const tickOpts   = { color: '#94a3b8', font: { size: 11, family: 'Inter, sans-serif' } };
+const TT = {
+    backgroundColor: '#fff', titleColor: '#0f172a', bodyColor: '#64748b',
+    borderColor: BORDER_CLR, borderWidth: 1, padding: 10, cornerRadius: 8,
+    titleFont: { weight: '600', size: 12 }, bodyFont: { size: 12 }
+};
+
+// ── State ────────────────────────────────────────────────────────────
+let selectedIds = new Set(ALL_STORES.map(s => s.StoreId));
+let charts = {};
+
+// ── Helpers ──────────────────────────────────────────────────────────
+const fmt   = n => '€' + Number(n).toLocaleString('en-GB', { maximumFractionDigits: 0 });
+const fmt2  = n => '€' + Number(n).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const pct   = n => Number(n).toFixed(1) + '%';
+const kfmt  = v => v >= 1000000 ? '€' + (v/1000000).toFixed(1) + 'M' : v >= 1000 ? '€' + (v/1000).toFixed(0) + 'k' : '€' + v;
+const norm  = arr => { const mx = Math.max(...arr, 1); return arr.map(v => Math.round(v / mx * 100)); };
+const storeColor = s => PALETTE[ALL_DATA.indexOf(s) % PALETTE.length];
+const storeSoft  = s => PALETTE_SOFT[ALL_DATA.indexOf(s) % PALETTE_SOFT.length];
+const marginCls  = m => m >= 25 ? 'val-good' : m >= 10 ? 'val-warn' : 'val-bad';
+
+function activeData() { return ALL_DATA.filter(s => selectedIds.has(s.storeId)); }
+
+function makeChart(id, cfg) {
+    if (charts[id]) charts[id].destroy();
+    const ctx = document.getElementById(id);
+    if (ctx) charts[id] = new Chart(ctx, cfg);
+}
+
+// ── Compare Stores pills ──────────────────────────────────────────────
+function renderPills() {
+    const wrap   = document.getElementById('storePillsContainer');
+    const notice = document.getElementById('minNotice');
+    wrap.innerHTML = '';
+    ALL_STORES.forEach((s, i) => {
+        const on  = selectedIds.has(s.StoreId);
+        const col = PALETTE[i % PALETTE.length];
+        const btn = document.createElement('button');
+        btn.type      = 'button';
+        btn.className = 'sc-store-pill' + (on ? ' active' : '');
+        btn.style.setProperty('--pill-color', col);
+        btn.innerHTML = `<span class="sc-pill-dot"></span>${s.StoreName}`;
+        btn.addEventListener('click', () => {
+            if (on && selectedIds.size <= 1) return;
+            on ? selectedIds.delete(s.StoreId) : selectedIds.add(s.StoreId);
+            renderPills(); renderAll();
+        });
+        wrap.appendChild(btn);
+    });
+    notice.style.display = selectedIds.size < 2 ? 'flex' : 'none';
+}
+
+// ── Store summary cards ───────────────────────────────────────────────
+function renderCards() {
+    const grid = document.getElementById('storeCardsGrid');
+    const data = activeData();
+    grid.innerHTML = '';
+    if (!data.length) return;
+
+    const maxRev    = Math.max(...data.map(s => s.revenue), 1);
+    const sorted    = [...data].sort((a, b) => b.revenue - a.revenue);
+
+    data.forEach(s => {
+        const col    = storeColor(s);
+        const rank   = sorted.indexOf(s) + 1;
+        const barPct = Math.round(s.revenue / maxRev * 100);
+
+        const lowTag = s.lowStock > 0 ? `<span class="sc-risk-tag warning">${s.lowStock} low</span>` : '';
+        const oosTag = s.oos > 0       ? `<span class="sc-risk-tag danger">${s.oos} OOS</span>`      : '';
+        const health = !lowTag && !oosTag ? '<span class="sc-risk-tag ok"><i class="fa-solid fa-circle-check" style="font-size:10px;"></i> Healthy</span>' : lowTag + oosTag;
+
+        const meta = [s.city, s.storeType].filter(Boolean).join(' · ') || 'Store';
+
+        const card = document.createElement('div');
+        card.className = 'sc-store-card';
+        card.style.setProperty('--store-color', col);
+        card.innerHTML = `
+            <div class="sc-card-header">
+                <span class="sc-card-rank">#${rank}</span>
+                <div class="sc-card-store-info">
+                    <div class="sc-card-name">${s.storeName}</div>
+                    <div class="sc-card-meta">${meta}</div>
+                </div>
+                <div class="sc-card-dot" style="background:${col};"></div>
+            </div>
+            <div class="sc-card-revenue-block">
+                <div class="sc-card-rev-label">Revenue</div>
+                <div class="sc-card-rev-value">${fmt(s.revenue)}</div>
+                <div class="sc-card-rev-bar"><div class="sc-card-rev-fill" style="width:${barPct}%"></div></div>
+            </div>
+            <div class="sc-card-kpis">
+                <div class="sc-kpi">
+                    <div class="sc-kpi-val">${s.orders.toLocaleString()}</div>
+                    <div class="sc-kpi-lbl">Orders</div>
+                </div>
+                <div class="sc-kpi">
+                    <div class="sc-kpi-val">${fmt2(s.aov)}</div>
+                    <div class="sc-kpi-lbl">AOV</div>
+                </div>
+                <div class="sc-kpi">
+                    <div class="sc-kpi-val sc-kpi-val--${marginCls(s.margin)}">${pct(s.margin)}</div>
+                    <div class="sc-kpi-lbl">Margin</div>
+                </div>
+                <div class="sc-kpi">
+                    <div class="sc-kpi-val">${Number(s.invTurnover).toFixed(2)}×</div>
+                    <div class="sc-kpi-lbl">Turnover</div>
+                </div>
+            </div>
+            <div class="sc-card-footer">
+                <span class="sc-card-footer-lbl">Stock</span>
+                ${health}
+            </div>`;
+        grid.appendChild(card);
+    });
+}
+
+// ── Executive chart: Revenue vs Profit Margin ─────────────────────────
+function renderExecChart() {
+    const data  = activeData();
+    const thick = Math.max(20, Math.min(72, 360 / Math.max(data.length, 1)));
+
+    makeChart('execChart', {
+        type: 'bar',
+        data: {
+            labels: data.map(s => s.storeName),
+            datasets: [
+                {
+                    type: 'bar',
+                    label: 'Revenue',
+                    data: data.map(s => s.revenue),
+                    backgroundColor: data.map(s => storeColor(s)),
+                    borderRadius: 6,
+                    barThickness: thick,
+                    yAxisID: 'yRev',
+                    order: 2
+                },
+                {
+                    type: 'line',
+                    label: 'Profit Margin %',
+                    data: data.map(s => s.margin),
+                    borderColor: '#10b981',
+                    backgroundColor: 'rgba(16,185,129,0.08)',
+                    pointBackgroundColor: data.map(s => s.margin >= 25 ? '#10b981' : s.margin >= 10 ? '#f59e0b' : '#ef4444'),
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                    pointRadius: 6,
+                    borderWidth: 2.5,
+                    tension: 0.25,
+                    fill: false,
+                    yAxisID: 'yMargin',
+                    order: 1
+                }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: {
+                    position: 'top',
+                    align: 'end',
+                    labels: { boxWidth: 10, padding: 18, font: { size: 12, family: 'Inter, sans-serif' }, color: '#64748b' }
+                },
+                tooltip: {
+                    ...TT,
+                    callbacks: {
+                        label: ctx => ctx.dataset.label === 'Revenue'
+                            ? '  Revenue: ' + fmt(ctx.raw)
+                            : '  Margin: '  + Number(ctx.raw).toFixed(1) + '%'
+                    }
+                }
+            },
+            scales: {
+                x:       { grid: { display: false }, ticks: tickOpts },
+                yRev:    { position: 'left',  grid: gridOpts, beginAtZero: true,
+                           ticks: { ...tickOpts, callback: v => kfmt(v) } },
+                yMargin: { position: 'right', grid: { display: false }, beginAtZero: true,
+                           ticks: { ...tickOpts, callback: v => v + '%' },
+                           suggestedMax: Math.max(...data.map(s => s.margin), 40) * 1.2 }
+            }
+        }
+    });
+}
+
+// ── Sales Channel Mix ────────────────────────────────────────────────
+function renderChannelChart() {
+    const data  = activeData();
+    const thick = Math.max(20, Math.min(56, 260 / Math.max(data.length, 1)));
+
+    makeChart('channelChart', {
+        type: 'bar',
+        data: {
+            labels: data.map(s => s.storeName),
+            datasets: [
+                { label: 'Online',   data: data.map(s => s.onlinePct),   backgroundColor: '#6366f1', borderRadius: 0, barThickness: thick },
+                { label: 'Mobile',   data: data.map(s => s.mobilePct),   backgroundColor: '#10b981', borderRadius: 0, barThickness: thick },
+                { label: 'Physical', data: data.map(s => s.physicalPct), backgroundColor: '#f59e0b', borderRadius: 0, barThickness: thick }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { boxWidth: 12, padding: 20, font: { size: 12.5, family: 'Inter, sans-serif' }, color: '#475569' }
+                },
+                tooltip: {
+                    ...TT,
+                    callbacks: {
+                        label: ctx => `  ${ctx.dataset.label}: ${Number(ctx.raw).toFixed(1)}%`
+                    }
+                }
+            },
+            scales: {
+                x: { stacked: true, grid: { display: false }, ticks: tickOpts },
+                y: { stacked: true, grid: gridOpts, max: 100, beginAtZero: true,
+                     ticks: { ...tickOpts, callback: v => v + '%' } }
+            }
+        }
+    });
+}
+
+// ── Performance Profile radar ─────────────────────────────────────────
+function renderRadarChart() {
+    const data = activeData();
+    if (!data.length) return;
+
+    const dims = ['Revenue', 'Orders', 'AOV', 'Margin', 'Turnover'];
+    const raw  = [data.map(s=>s.revenue), data.map(s=>s.orders), data.map(s=>s.aov),
+                  data.map(s=>s.margin),  data.map(s=>s.invTurnover)];
+    const rows = raw.map(arr => norm(arr));
+
+    makeChart('radarChart', {
+        type: 'radar',
+        data: {
+            labels: dims,
+            datasets: data.map(s => ({
+                label:                s.storeName,
+                data:                 dims.map((_, di) => rows[di][data.indexOf(s)]),
+                borderColor:          storeColor(s),
+                backgroundColor:      storeSoft(s),
+                pointBackgroundColor: storeColor(s),
+                borderWidth: 2, pointRadius: 3
+            }))
+        },
+        options: {
+            responsive: true, maintainAspectRatio: true,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { boxWidth: 10, padding: 14, font: { size: 11.5, family: 'Inter, sans-serif' }, color: '#64748b' }
+                },
+                tooltip: { ...TT }
+            },
+            scales: {
+                r: {
+                    min: 0, max: 100,
+                    ticks: { stepSize: 25, display: false },
+                    grid:  { color: BORDER_CLR },
+                    pointLabels: { font: { size: 11, family: 'Inter, sans-serif' }, color: '#64748b' },
+                    angleLines:  { color: BORDER_CLR }
+                }
+            }
+        }
+    });
+}
+
+// ── Inventory Value chart (horizontal bar) ────────────────────────────
+function renderInvValueChart() {
+    const data = activeData();
+
+    makeChart('invValueChart', {
+        type: 'bar',
+        data: {
+            labels: data.map(s => s.storeName),
+            datasets: [{
+                label: 'Inventory Value',
+                data: data.map(s => s.invValue),
+                backgroundColor: data.map(s => storeColor(s)),
+                borderRadius: 5,
+                barThickness: Math.max(18, Math.min(48, 180 / Math.max(data.length, 1)))
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true, maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: { ...TT, callbacks: { label: ctx => '  ' + fmt(ctx.raw) } }
+            },
+            scales: {
+                x: { grid: gridOpts, beginAtZero: true, ticks: { ...tickOpts, callback: v => kfmt(v) } },
+                y: { grid: { display: false }, ticks: tickOpts }
+            }
+        }
+    });
+}
+
+// ── Inventory Risk scorecard (HTML, not a chart) ──────────────────────
+function renderInvRisk() {
+    const data      = document.getElementById('invRiskContainer');
+    const stores    = activeData();
+    if (!stores.length) { data.innerHTML = ''; return; }
+
+    const riskScore = s => s.oos * 3 + s.lowStock * 2 + s.deadStock;
+    const turnCls   = t => t >= 4 ? 'ok' : t >= 2 ? 'warn' : 'bad';
+
+    const rows = [...stores].sort((a, b) => riskScore(b) - riskScore(a)).map(s => {
+        const tc   = turnCls(s.invTurnover);
+        const risk = riskScore(s);
+        return `<div class="sc-inv-row">
+            <div class="sc-inv-row-store">
+                <span class="sc-inv-dot" style="background:${storeColor(s)}"></span>
+                <span class="sc-inv-store-name">${s.storeName}</span>
+            </div>
+            <div class="sc-inv-metrics">
+                <div class="sc-inv-cell">
+                    <span class="sc-inv-badge sc-inv-badge--${tc}">${Number(s.invTurnover).toFixed(2)}×</span>
+                    <span class="sc-inv-lbl">Turnover</span>
+                </div>
+                <div class="sc-inv-cell">
+                    <span class="sc-inv-count ${s.lowStock > 0 ? 'sc-inv-count--warn' : 'sc-inv-count--ok'}">${s.lowStock}</span>
+                    <span class="sc-inv-lbl">Low Stock</span>
+                </div>
+                <div class="sc-inv-cell">
+                    <span class="sc-inv-count ${s.deadStock > 0 ? 'sc-inv-count--dead' : 'sc-inv-count--ok'}">${s.deadStock}</span>
+                    <span class="sc-inv-lbl">Dead Stock</span>
+                </div>
+                <div class="sc-inv-cell">
+                    <span class="sc-inv-count ${s.oos > 0 ? 'sc-inv-count--danger' : 'sc-inv-count--ok'}">${s.oos}</span>
+                    <span class="sc-inv-lbl">OOS</span>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+
+    data.innerHTML = rows;
+}
+
+// ── Ranking table ─────────────────────────────────────────────────────
+function renderTable() {
+    const data  = [...activeData()].sort((a, b) => b.revenue - a.revenue);
+    const body  = document.getElementById('rankingBody');
+    const badge = document.getElementById('rankingBadge');
+    body.innerHTML = '';
+    badge.textContent = data.length + ' store' + (data.length !== 1 ? 's' : '');
+
+    const rankCls = i => i === 0 ? 'sc-rank-gold' : i === 1 ? 'sc-rank-silver' : i === 2 ? 'sc-rank-bronze' : '';
+
+    data.forEach((s, i) => {
+        const tr = document.createElement('tr');
+        const col = storeColor(s);
+        const meta = s.city || '';
+        tr.innerHTML = `
+            <td><span class="sc-rank-badge ${rankCls(i)}">${i + 1}</span></td>
+            <td>
+                <div class="sc-table-store">
+                    <div class="sc-table-dot" style="background:${col}"></div>
+                    <div>
+                        <div class="sc-table-name">${s.storeName}</div>
+                        ${meta ? `<div class="sc-table-city">${meta}</div>` : ''}
+                    </div>
+                </div>
+            </td>
+            <td class="text-end" style="font-weight:600">${fmt(s.revenue)}</td>
+            <td class="text-end">${s.orders.toLocaleString()}</td>
+            <td class="text-end">${fmt2(s.aov)}</td>
+            <td class="text-end">${fmt(s.profit)}</td>
+            <td class="text-end"><span class="sc-margin-pill ${marginCls(s.margin)}">${pct(s.margin)}</span></td>
+            <td class="text-end">${Number(s.invTurnover).toFixed(2)}×</td>
+            <td class="text-end">${s.lowStock > 0
+                ? `<span style="color:var(--warning);font-weight:600">${s.lowStock}</span>`
+                : `<span style="color:var(--success)">0</span>`}</td>`;
+        body.appendChild(tr);
+    });
+}
+
+// ── Smart Insights ────────────────────────────────────────────────────
+function renderInsights() {
+    const grid  = document.getElementById('insightsGrid');
+    const badge = document.getElementById('insightsBadge');
+    grid.innerHTML = ALL_INSIGHTS.map(it =>
+        `<div class="alert-item ${it.tag || 'info'}">
+            <i class="fa-solid ${it.icon}"></i>
+            <div><div class="alert-item-title">${it.title}</div>${it.body}</div>
+         </div>`
+    ).join('');
+    badge.textContent = ALL_INSIGHTS.length + ' insight' + (ALL_INSIGHTS.length !== 1 ? 's' : '');
+}
+
+// ── Master render ─────────────────────────────────────────────────────
+function renderAll() {
+    renderCards();
+    renderExecChart();
+    renderChannelChart();
+    renderRadarChart();
+    renderInvValueChart();
+    renderInvRisk();
+    renderTable();
+}
+
+// ── Date range ────────────────────────────────────────────────────────
+function setDateRange(dr) {
+    const url = new URL(window.location.href);
+    url.searchParams.set('dateRange', dr);
+    window.location.href = url.toString();
+}
+
+// ── Init ──────────────────────────────────────────────────────────────
+renderPills();
+renderInsights();
+renderAll();
+</script>
+}

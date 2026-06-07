@@ -1,0 +1,47 @@
+﻿@{
+    ViewData["Title"] = "Import Center";
+}
+
+<h2>Import Center</h2>
+
+<p>Upload standardized CSV files exported from retail systems.</p>
+
+@if (ViewBag.Message != null)
+{
+        <div class="alert alert-info">
+        @ViewBag.Message
+        </div>
+}
+
+<div class="card p-4 mt-3">
+    <h4>Import Products</h4>
+    <form asp-controller="Import" asp-action="ImportProducts" method="post" enctype="multipart/form-data">
+        <div class="mb-3">
+            <label for="file" class="form-label">Select Products CSV File</label>
+            <input type="file" name="file" class="form-control" accept=".csv" />
+        </div>
+        <button type="submit" class="btn btn-primary">Upload Products CSV</button>
+    </form>
+</div>
+
+<div class="card p-4 mt-3">
+    <h4>Import Inventory</h4>
+    <form asp-controller="Import" asp-action="ImportInventory" method="post" enctype="multipart/form-data">
+        <div class="mb-3">
+            <label for="file" class="form-label">Select Inventory CSV File</label>
+            <input type="file" name="file" class="form-control" accept=".csv" />
+        </div>
+        <button type="submit" class="btn btn-success">Upload Inventory CSV</button>
+    </form>
+</div>
+
+<div class="card p-4 mt-3">
+    <h4>Import Sales</h4>
+    <form asp-controller="Import" asp-action="ImportSales" method="post" enctype="multipart/form-data">
+        <div class="mb-3">
+            <label for="file" class="form-label">Select Sales CSV File</label>
+            <input type="file" name="file" class="form-control" accept=".csv" />
+        </div>
+        <button type="submit" class="btn btn-warning">Upload Sales CSV</button>
+    </form>
+</div>

@@ -1,0 +1,688 @@
+@{
+    ViewData["Title"] = "Sales Analytics";
+
+    var storeIds         = (ViewBag.SelectedStoreIds as List<int>) ?? new List<int>();
+    var dateRange        = (ViewBag.DateRange         as string)   ?? "all";
+    decimal totalRevenue = (decimal)(ViewBag.TotalRevenue      ?? 0m);
+    int     totalOrders  = (int)    (ViewBag.TotalOrders       ?? 0);
+    int     totalUnits   = (int)    (ViewBag.TotalUnits        ?? 0);
+    decimal grossProfit  = (decimal)(ViewBag.GrossProfit       ?? 0m);
+    decimal aov          = (decimal)(ViewBag.AverageOrderValue ?? 0m);
+    decimal profitMargin = (decimal)(ViewBag.ProfitMargin      ?? 0m);
+
+    string trendGranLabel = (ViewBag.TrendGranularity as string) switch
+    {
+        "daily"  => "Daily",
+        "weekly" => "Weekly",
+        _        => "Monthly"
+    };
+
+    string dateRangeLabel = dateRange switch
+    {
+        "7d"  => "Last 7 Days",
+        "30d" => "Last 30 Days",
+        "90d" => "Last 90 Days",
+        "12m" => "Last 12 Months",
+        _     => "All Time"
+    };
+
+    string marginClass = profitMargin >= 25 ? "emerald" : profitMargin >= 10 ? "amber" : "red";
+}
+
+<!-- ══════════════════════════════════════════════════════════════════
+     PAGE HEADER
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="dash-header">
+    <div>
+        <h1 class="dash-title">Sales Analytics</h1>
+        <p class="dash-subtitle">Revenue trends, basket value, product mix, and channel performance</p>
+    </div>
+    <div class="dash-actions">
+
+        <div class="dropdown">
+            <button class="date-range-btn dropdown-toggle" type="button"
+                    data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="fa-regular fa-calendar"></i>
+                @dateRangeLabel
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end shadow-sm border"
+                style="min-width:170px; border-radius:12px; padding:6px; font-size:13px;">
+                <li><a class="dropdown-item dr-item @(dateRange=="7d" ?"active":"")" href="javascript:void(0)" onclick="setDateRange('7d')">Last 7 Days</a></li>
+                <li><a class="dropdown-item dr-item @(dateRange=="30d"?"active":"")" href="javascript:void(0)" onclick="setDateRange('30d')">Last 30 Days</a></li>
+                <li><a class="dropdown-item dr-item @(dateRange=="90d"?"active":"")" href="javascript:void(0)" onclick="setDateRange('90d')">Last 90 Days</a></li>
+                <li><a class="dropdown-item dr-item @(dateRange=="12m"?"active":"")" href="javascript:void(0)" onclick="setDateRange('12m')">Last 12 Months</a></li>
+                <li><hr class="dropdown-divider my-1"></li>
+                <li><a class="dropdown-item dr-item @(dateRange=="all"?"active":"")" href="javascript:void(0)" onclick="setDateRange('all')">All Time</a></li>
+            </ul>
+        </div>
+
+        <a href="#" class="export-btn">
+            <i class="fa-solid fa-arrow-up-from-bracket"></i> Export
+        </a>
+
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     KPI GRID — 6 cards
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="kpi-grid kpi-grid--6">
+
+    <div class="card kpi-card">
+        <div class="card-body">
+            <div class="kpi-top">
+                <span class="kpi-label">Total Revenue</span>
+                <div class="kpi-icon indigo"><i class="fa-solid fa-wallet"></i></div>
+            </div>
+            <div class="kpi-value">€@totalRevenue.ToString("N0")</div>
+            <div class="kpi-footer"><span class="kpi-pill emerald"><i class="fa-solid fa-circle-check"></i> @dateRangeLabel</span></div>
+        </div>
+    </div>
+
+    <div class="card kpi-card">
+        <div class="card-body">
+            <div class="kpi-top">
+                <span class="kpi-label">Total Orders</span>
+                <div class="kpi-icon indigo"><i class="fa-solid fa-bag-shopping"></i></div>
+            </div>
+            <div class="kpi-value">@totalOrders.ToString("N0")</div>
+            <div class="kpi-footer"><span class="kpi-pill indigo"><i class="fa-solid fa-rotate"></i> Distinct orders</span></div>
+        </div>
+    </div>
+
+    <div class="card kpi-card">
+        <div class="card-body">
+            <div class="kpi-top">
+                <span class="kpi-label">Units Sold</span>
+                <div class="kpi-icon slate"><i class="fa-solid fa-cube"></i></div>
+            </div>
+            <div class="kpi-value">@totalUnits.ToString("N0")</div>
+            <div class="kpi-footer"><span class="kpi-pill slate">Total quantity</span></div>
+        </div>
+    </div>
+
+    <div class="card kpi-card">
+        <div class="card-body">
+            <div class="kpi-top">
+                <span class="kpi-label">Avg Order Value</span>
+                <div class="kpi-icon amber"><i class="fa-solid fa-receipt"></i></div>
+            </div>
+            <div class="kpi-value">€@aov.ToString("N2")</div>
+            <div class="kpi-footer"><span class="kpi-pill amber">AOV</span></div>
+        </div>
+    </div>
+
+    <div class="card kpi-card">
+        <div class="card-body">
+            <div class="kpi-top">
+                <span class="kpi-label">Gross Profit</span>
+                <div class="kpi-icon emerald"><i class="fa-solid fa-arrow-trend-up"></i></div>
+            </div>
+            <div class="kpi-value">€@grossProfit.ToString("N0")</div>
+            <div class="kpi-footer"><span class="kpi-pill emerald">Profitability</span></div>
+        </div>
+    </div>
+
+    <div class="card kpi-card">
+        <div class="card-body">
+            <div class="kpi-top">
+                <span class="kpi-label">Profit Margin</span>
+                <div class="kpi-icon @marginClass"><i class="fa-solid fa-percent"></i></div>
+            </div>
+            <div class="kpi-value">@profitMargin.ToString("N1")%</div>
+            <div class="kpi-footer">
+                <span class="kpi-pill @marginClass">
+                    @(profitMargin >= 25 ? "Strong margin" : profitMargin >= 10 ? "Healthy" : "Watch margin")
+                </span>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     ROW 1 — Revenue Over Time (full-width)
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="row g-4 mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex align-items-start justify-content-between">
+                <div>
+                    <div class="chart-card-title">Revenue Over Time</div>
+                    <div class="chart-card-subtitle">@dateRangeLabel · @trendGranLabel granularity</div>
+                </div>
+                <span class="d-flex align-items-center gap-1" style="font-size:12px;color:var(--muted);">
+                    <span style="width:10px;height:3px;border-radius:2px;background:#5b5fc7;display:inline-block;"></span> Revenue
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="chart-wrap" style="height:260px;">
+                    <canvas id="saRevenueTrendChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     ROW 2 — AOV Trend | Discount Efficiency
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="row g-4 mb-4">
+
+    <div class="col-lg-6 col-12">
+        <div class="card h-100">
+            <div class="card-header d-flex align-items-start justify-content-between">
+                <div>
+                    <div class="chart-card-title">Average Order Value Trend</div>
+                    <div class="chart-card-subtitle">Basket value over time — @dateRangeLabel</div>
+                </div>
+                <span class="d-flex align-items-center gap-1" style="font-size:12px;color:var(--muted);">
+                    <span style="width:10px;height:3px;border-radius:2px;background:#f59e0b;display:inline-block;"></span> AOV
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="chart-wrap" style="height:240px;">
+                    <canvas id="saAovChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6 col-12">
+        <div class="card h-100">
+            <div class="card-header d-flex align-items-start justify-content-between">
+                <div>
+                    <div class="chart-card-title">Discount Efficiency</div>
+                    <div class="chart-card-subtitle">Revenue and margin % by discount band</div>
+                </div>
+                <div class="d-flex gap-3 align-items-center" style="font-size:12px;color:var(--muted);">
+                    <span class="d-flex align-items-center gap-1"><span style="width:10px;height:10px;border-radius:3px;background:#f59e0b;display:inline-block;"></span> Revenue</span>
+                    <span class="d-flex align-items-center gap-1"><span style="width:10px;height:3px;border-radius:2px;background:#5b5fc7;display:inline-block;"></span> Margin %</span>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="chart-wrap" style="height:240px;">
+                    <canvas id="saDiscountChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     ROW 3 — Top Performing Products (full-width)
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="row g-4 mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="chart-card-title">Top Performing Products</div>
+                    <div class="chart-card-subtitle">Highest revenue products — @dateRangeLabel</div>
+                </div>
+                <span class="kpi-pill slate" style="font-size:11px;">Top 5 by revenue</span>
+            </div>
+            <div class="card-body p-0">
+                <table class="top-products-table">
+                    <thead>
+                        <tr>
+                            <th style="width:36px;">#</th>
+                            <th>Product</th>
+                            <th>Category</th>
+                            <th style="text-align:right;">Revenue</th>
+                            <th style="text-align:right;">Units</th>
+                            <th style="text-align:right;">Margin</th>
+                        </tr>
+                    </thead>
+                    <tbody id="saTopProductsTbody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     ROW 4 — Colour Performance | Size Performance
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="row g-4 mb-4">
+
+    <div class="col-lg-6 col-12">
+        <div class="card h-100">
+            <div class="card-header">
+                <div class="chart-card-title">Colour Performance</div>
+                <div class="chart-card-subtitle">Top 6 colours by units sold</div>
+            </div>
+            <div class="card-body">
+                <div class="chart-wrap" style="height:240px;">
+                    <canvas id="saColorChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6 col-12">
+        <div class="card h-100">
+            <div class="card-header">
+                <div class="chart-card-title">Size Performance</div>
+                <div class="chart-card-subtitle">Units sold by standard size</div>
+            </div>
+            <div class="card-body">
+                <div class="chart-wrap" style="height:240px;">
+                    <canvas id="saSizeChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     ROW 5 — Channel Split | Smart Insights
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="row g-4 mb-4">
+
+    <div class="col-lg-5 col-12">
+        <div class="card h-100">
+            <div class="card-header">
+                <div class="chart-card-title">Channel Split</div>
+                <div class="chart-card-subtitle">Revenue, share, and AOV by sales channel</div>
+            </div>
+            <div class="card-body p-0">
+                <table class="sa-channel-table">
+                    <thead>
+                        <tr>
+                            <th>Channel</th>
+                            <th style="text-align:right;">Revenue</th>
+                            <th>Share</th>
+                            <th style="text-align:right;">AOV</th>
+                        </tr>
+                    </thead>
+                    <tbody id="saChannelTbody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-7 col-12">
+        <div class="card h-100">
+            <div class="card-header d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="chart-card-title">Smart Insights</div>
+                    <div class="chart-card-subtitle">Business intelligence from real sales data</div>
+                </div>
+                <span class="kpi-pill emerald" style="font-size:11px;" id="saInsightCount"></span>
+            </div>
+            <div class="card-body" id="saInsightsBody" style="overflow-y:auto; max-height:360px;">
+                <!-- Rendered by JS -->
+            </div>
+        </div>
+    </div>
+
+</div>
+
+@section Scripts {
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<script>
+(function () {
+
+    // ── Design tokens ────────────────────────────────────────────────
+    const C_INDIGO  = '#5b5fc7';
+    const C_EMERALD = '#10b981';
+    const C_AMBER   = '#f59e0b';
+    const C_ROSE    = '#f43f5e';
+    const C_VIOLET  = '#8b5cf6';
+    const C_CYAN    = '#06b6d4';
+    const C_PINK    = '#ec4899';
+    const C_LIME    = '#84cc16';
+
+    const FONT_FAMILY = "'Inter', 'Segoe UI', sans-serif";
+    const TEXT_MUTED  = '#94a3b8';
+    const BORDER_CLR  = '#e8ecf2';
+
+    Chart.defaults.font.family = FONT_FAMILY;
+    Chart.defaults.font.size   = 12;
+    Chart.defaults.color       = TEXT_MUTED;
+
+    const gridOpts = { color: BORDER_CLR, lineWidth: 1, drawBorder: false };
+    const tickOpts = { color: TEXT_MUTED, font: { size: 11 } };
+
+    // ── Server data ──────────────────────────────────────────────────
+    const trendLabels        = @Html.Raw(ViewBag.TrendLabels         ?? "[]");
+    const trendRevenue       = @Html.Raw(ViewBag.TrendRevenue        ?? "[]");
+    const aovValues          = @Html.Raw(ViewBag.AovValues           ?? "[]");
+    const trendGranularity   = '@(ViewBag.TrendGranularity ?? "monthly")';
+    const discountBandLabels = @Html.Raw(ViewBag.DiscountBandLabels  ?? "[]");
+    const discountBandCounts = @Html.Raw(ViewBag.DiscountBandCounts  ?? "[]");
+    const discountBandRev    = @Html.Raw(ViewBag.DiscountBandRevenue ?? "[]");
+    const discountBandMargin = @Html.Raw(ViewBag.DiscountBandMargin  ?? "[]");
+    const topProducts        = @Html.Raw(ViewBag.TopProducts         ?? "[]");
+    const colorLabels        = @Html.Raw(ViewBag.ColorLabels         ?? "[]");
+    const colorUnits         = @Html.Raw(ViewBag.ColorUnits          ?? "[]");
+    const colorRevenue       = @Html.Raw(ViewBag.ColorRevenue        ?? "[]");
+    const sizeLabels         = @Html.Raw(ViewBag.SizeLabels          ?? "[]");
+    const sizeUnits          = @Html.Raw(ViewBag.SizeUnits           ?? "[]");
+    const channelSplit       = @Html.Raw(ViewBag.ChannelSplit        ?? "[]");
+    const smartInsights      = @Html.Raw(ViewBag.SmartInsights       ?? "[]");
+
+    // ── Shared axis helpers ──────────────────────────────────────────
+    function revTick(v) { return '€' + (v >= 1e6 ? (v/1e6).toFixed(1)+'M' : v >= 1e3 ? (v/1e3).toFixed(0)+'k' : v); }
+    function aovTick(v) { return '€' + (v >= 1e3 ? (v/1e3).toFixed(1)+'k' : v); }
+    function unitTick(v){ return v >= 1e3 ? (v/1e3).toFixed(0)+'k' : v; }
+
+    function pointConfig(n) {
+        return { ptRadius: n <= 7 ? 4 : n <= 14 ? 3 : n <= 31 ? 2 : 0, ptHover: n <= 31 ? 5 : 3 };
+    }
+    function maxTicks(n, gran) {
+        return gran === 'daily' && n > 10 ? 10 : gran === 'monthly' && n > 18 ? 12 : n;
+    }
+    const tension = trendGranularity === 'daily' ? 0.15 : 0.38;
+
+    // ── 1. Revenue Over Time ─────────────────────────────────────────
+    const revCtx = document.getElementById('saRevenueTrendChart');
+    if (revCtx && trendLabels.length) {
+        const n   = trendLabels.length;
+        const { ptRadius, ptHover } = pointConfig(n);
+        new Chart(revCtx, {
+            type: 'line',
+            data: {
+                labels: trendLabels,
+                datasets: [{
+                    label: 'Revenue',
+                    data: trendRevenue,
+                    borderColor: C_INDIGO,
+                    backgroundColor: 'rgba(91,95,199,0.08)',
+                    borderWidth: 2.5,
+                    pointRadius: ptRadius,
+                    pointHoverRadius: ptHover,
+                    fill: true,
+                    tension
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#fff', borderColor: BORDER_CLR, borderWidth: 1,
+                        titleColor: '#1e293b', bodyColor: '#475569', padding: 12,
+                        callbacks: { label: ctx => ` Revenue: €${ctx.parsed.y.toLocaleString('en', { minimumFractionDigits: 2 })}` }
+                    }
+                },
+                scales: {
+                    x: { grid: { ...gridOpts, drawOnChartArea: false }, ticks: { ...tickOpts, maxTicksLimit: maxTicks(n, trendGranularity), maxRotation: trendGranularity === 'daily' && n > 14 ? 45 : 0 } },
+                    y: { grid: gridOpts, ticks: { ...tickOpts, callback: revTick }, beginAtZero: true }
+                }
+            }
+        });
+    }
+
+    // ── 2. AOV Trend ─────────────────────────────────────────────────
+    const aovCtx = document.getElementById('saAovChart');
+    if (aovCtx && trendLabels.length) {
+        const n   = trendLabels.length;
+        const { ptRadius, ptHover } = pointConfig(n);
+        new Chart(aovCtx, {
+            type: 'line',
+            data: {
+                labels: trendLabels,
+                datasets: [{
+                    label: 'AOV',
+                    data: aovValues,
+                    borderColor: C_AMBER,
+                    backgroundColor: 'rgba(245,158,11,0.08)',
+                    borderWidth: 2,
+                    pointRadius: ptRadius,
+                    pointHoverRadius: ptHover,
+                    fill: true,
+                    tension
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#fff', borderColor: BORDER_CLR, borderWidth: 1,
+                        titleColor: '#1e293b', bodyColor: '#475569', padding: 12,
+                        callbacks: { label: ctx => ` AOV: €${ctx.parsed.y.toLocaleString('en', { minimumFractionDigits: 2 })}` }
+                    }
+                },
+                scales: {
+                    x: { grid: { ...gridOpts, drawOnChartArea: false }, ticks: { ...tickOpts, maxTicksLimit: maxTicks(n, trendGranularity), maxRotation: 0 } },
+                    y: { grid: gridOpts, ticks: { ...tickOpts, callback: aovTick }, beginAtZero: false }
+                }
+            }
+        });
+    }
+
+    // ── 3. Discount Efficiency (mixed bar + line) ─────────────────────
+    const discCtx = document.getElementById('saDiscountChart');
+    if (discCtx && discountBandLabels.length) {
+        // Bars grade green → red to show risk level of each band
+        const bandFill   = ['rgba(16,185,129,.75)', 'rgba(132,204,22,.75)', 'rgba(245,158,11,.75)', 'rgba(249,115,22,.75)', 'rgba(239,68,68,.75)'];
+        const bandBorder = ['#10b981', '#84cc16', '#f59e0b', '#f97316', '#ef4444'];
+        new Chart(discCtx, {
+            type: 'bar',
+            data: {
+                labels: discountBandLabels,
+                datasets: [
+                    {
+                        type: 'bar',
+                        label: 'Revenue',
+                        data: discountBandRev,
+                        backgroundColor: bandFill,
+                        borderColor: bandBorder,
+                        borderWidth: 1.5,
+                        borderRadius: 6,
+                        borderSkipped: false,
+                        barPercentage: 0.6,
+                        categoryPercentage: 0.75,
+                        yAxisID: 'yRev',
+                        order: 2
+                    },
+                    {
+                        type: 'line',
+                        label: 'Margin %',
+                        data: discountBandMargin,
+                        borderColor: C_INDIGO,
+                        backgroundColor: 'transparent',
+                        borderWidth: 2,
+                        pointRadius: 4,
+                        pointHoverRadius: 6,
+                        tension: 0.3,
+                        yAxisID: 'yMargin',
+                        order: 1
+                    }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#fff', borderColor: BORDER_CLR, borderWidth: 1,
+                        titleColor: '#1e293b', bodyColor: '#475569', padding: 12,
+                        callbacks: {
+                            label: ctx => ctx.dataset.label === 'Revenue'
+                                ? ` Revenue: €${ctx.parsed.y.toLocaleString('en', { minimumFractionDigits: 2 })}`
+                                : ` Margin: ${ctx.parsed.y.toFixed(1)}%`,
+                            afterLabel: ctx => ctx.dataset.label === 'Revenue'
+                                ? ` Orders: ${discountBandCounts[ctx.dataIndex].toLocaleString('en')}`
+                                : ''
+                        }
+                    }
+                },
+                scales: {
+                    x:       { grid: { ...gridOpts, drawOnChartArea: false }, ticks: tickOpts },
+                    yRev:    { position: 'left',  grid: gridOpts, ticks: { ...tickOpts, callback: revTick }, beginAtZero: true, title: { display: true, text: 'Revenue', color: TEXT_MUTED, font: { size: 11 } } },
+                    yMargin: { position: 'right', grid: { display: false }, ticks: { ...tickOpts, callback: v => v + '%' }, title: { display: true, text: 'Margin %', color: TEXT_MUTED, font: { size: 11 } } }
+                }
+            }
+        });
+    }
+
+    // ── 4. Top Performing Products ───────────────────────────────────
+    (function () {
+        const el = document.getElementById('saTopProductsTbody');
+        if (!el) return;
+        if (!topProducts.length) {
+            el.innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;color:var(--muted);">No product data for this period.</td></tr>';
+            return;
+        }
+        el.innerHTML = topProducts.map((p, i) => {
+            const mCls = p.margin >= 25 ? 'high' : p.margin >= 10 ? 'medium' : 'low';
+            const rev  = p.revenue.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            return `<tr>
+                <td><span class="top-products-rank">${i + 1}</span></td>
+                <td><span class="top-products-name">${p.name}</span></td>
+                <td><span class="top-products-cat">${p.category}</span></td>
+                <td style="text-align:right;font-weight:600;color:var(--text-secondary);">€${rev}</td>
+                <td style="text-align:right;color:var(--text-tertiary);">${p.units.toLocaleString('en')}</td>
+                <td style="text-align:right;"><span class="top-products-margin ${mCls}">${p.margin.toFixed(1)}%</span></td>
+            </tr>`;
+        }).join('');
+    })();
+
+    // ── 5. Colour Performance (horizontal bar) ───────────────────────
+    const colorCtx = document.getElementById('saColorChart');
+    if (colorCtx && colorLabels.length) {
+        const palette = [C_INDIGO, C_VIOLET, C_CYAN, C_PINK, C_ROSE, C_EMERALD];
+        new Chart(colorCtx, {
+            type: 'bar',
+            data: {
+                labels: colorLabels,
+                datasets: [{
+                    label: 'Units',
+                    data: colorUnits,
+                    backgroundColor: colorLabels.map((_, i) => palette[i % palette.length] + 'cc'),
+                    borderColor:     colorLabels.map((_, i) => palette[i % palette.length]),
+                    borderWidth: 1.5,
+                    borderRadius: 4,
+                    borderSkipped: false,
+                    barPercentage: 0.65,
+                    categoryPercentage: 0.75
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#fff', borderColor: BORDER_CLR, borderWidth: 1,
+                        titleColor: '#1e293b', bodyColor: '#475569', padding: 12,
+                        callbacks: {
+                            label: ctx => ` Units: ${ctx.parsed.x.toLocaleString('en')}`,
+                            afterLabel: ctx => ` Revenue: €${colorRevenue[ctx.dataIndex].toLocaleString('en', { minimumFractionDigits: 2 })}`
+                        }
+                    }
+                },
+                scales: {
+                    x: { grid: gridOpts, ticks: { ...tickOpts, callback: unitTick }, beginAtZero: true },
+                    y: { grid: { display: false }, ticks: tickOpts }
+                }
+            }
+        });
+    }
+
+    // ── 6. Size Performance (vertical bar) ──────────────────────────
+    const sizeCtx = document.getElementById('saSizeChart');
+    if (sizeCtx && sizeLabels.length) {
+        const maxVal = sizeUnits.length ? Math.max(...sizeUnits) : 1;
+        const sizeFill = sizeUnits.map(v => {
+            const t = maxVal > 0 ? v / maxVal : 0;
+            return `rgba(91,95,199,${(0.3 + t * 0.7).toFixed(2)})`;
+        });
+        new Chart(sizeCtx, {
+            type: 'bar',
+            data: {
+                labels: sizeLabels,
+                datasets: [{
+                    label: 'Units Sold',
+                    data: sizeUnits,
+                    backgroundColor: sizeFill,
+                    borderColor: C_INDIGO,
+                    borderWidth: 1.5,
+                    borderRadius: 6,
+                    borderSkipped: false,
+                    barPercentage: 0.6,
+                    categoryPercentage: 0.75
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#fff', borderColor: BORDER_CLR, borderWidth: 1,
+                        titleColor: '#1e293b', bodyColor: '#475569', padding: 12,
+                        callbacks: { label: ctx => ` Units: ${ctx.parsed.y.toLocaleString('en')}` }
+                    }
+                },
+                scales: {
+                    x: { grid: { ...gridOpts, drawOnChartArea: false }, ticks: tickOpts },
+                    y: { grid: gridOpts, ticks: { ...tickOpts, callback: unitTick }, beginAtZero: true }
+                }
+            }
+        });
+    }
+
+    // ── 7. Channel Split table ───────────────────────────────────────
+    (function () {
+        const el = document.getElementById('saChannelTbody');
+        if (!el) return;
+        if (!channelSplit.length) {
+            el.innerHTML = '<tr><td colspan="4" style="padding:20px;text-align:center;color:var(--muted);">No channel data for this period.</td></tr>';
+            return;
+        }
+        const chanColors = [C_INDIGO, C_EMERALD, C_AMBER, C_ROSE, C_VIOLET, C_CYAN];
+        el.innerHTML = channelSplit.map((c, i) => {
+            const rev = c.revenue.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const aov = c.aov.toLocaleString('en',     { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const col = chanColors[i % chanColors.length];
+            return `<tr>
+                <td style="font-weight:500;color:var(--text-secondary);">${c.channel}</td>
+                <td style="text-align:right;font-weight:600;color:var(--text-secondary);">€${rev}</td>
+                <td>
+                    <div class="sa-share-bar">
+                        <div class="sa-share-bar-track">
+                            <div class="sa-share-bar-fill" style="width:${c.share}%;background:${col};"></div>
+                        </div>
+                        <span style="font-size:11.5px;font-weight:600;color:var(--text-tertiary);white-space:nowrap;">${c.share}%</span>
+                    </div>
+                </td>
+                <td style="text-align:right;color:var(--muted);">€${aov}</td>
+            </tr>`;
+        }).join('');
+    })();
+
+    // ── 8. Smart Insights ────────────────────────────────────────────
+    (function () {
+        const el    = document.getElementById('saInsightsBody');
+        const badge = document.getElementById('saInsightCount');
+        if (!el || !smartInsights.length) return;
+        const tagMap = { success: 'success', warning: 'warning', danger: 'danger', info: 'info', primary: 'info' };
+        el.innerHTML = smartInsights.map(it =>
+            `<div class="alert-item ${tagMap[it.tag] || 'info'}" style="margin-bottom:8px;">
+                <i class="fa-solid ${it.icon}"></i>
+                <div><div class="alert-item-title">${it.title}</div>${it.body}</div>
+            </div>`
+        ).join('');
+        if (badge) badge.textContent = smartInsights.length + ' insights';
+    })();
+
+})();
+
+window.setDateRange = function (range) {
+    const url = new URL(window.location.href);
+    url.searchParams.set('dateRange', range);
+    window.location.href = url.toString();
+};
+</script>
+
+}

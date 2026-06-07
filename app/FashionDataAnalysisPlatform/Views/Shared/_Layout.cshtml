@@ -1,0 +1,394 @@
+@using Microsoft.EntityFrameworkCore
+@inject FashionDataAnalysisPlatform.Data.AppDbContext DbContext
+
+@{
+    var layoutStores = await DbContext.Stores
+        .AsNoTracking()
+        .OrderBy(s => s.StoreName)
+        .ToListAsync();
+
+    var selectedStoreIds = Context.Request.Query["storeIds"]
+        .Select(x => int.TryParse(x, out var id) ? id : 0)
+        .Where(x => x > 0)
+        .ToList();
+
+    var currentController     = ViewContext.RouteData.Values["controller"]?.ToString() ?? "";
+    var scopeFormController = currentController switch {
+        "Sales"           => "Sales",
+        "Inventories"     => "Inventories",
+        "StoreComparison" => "StoreComparison",
+        _                 => "Dashboard"
+    };
+    var layoutDateRange       = ViewBag.DateRange as string ?? "all";
+
+    Func<string, string> NavClass = ctrl =>
+        string.Equals(currentController, ctrl, StringComparison.OrdinalIgnoreCase)
+            ? "sidebar-link active"
+            : "sidebar-link";
+}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - FashionBI</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/FashionDataAnalysisPlatform.styles.css" asp-append-version="true" />
+</head>
+
+<body>
+    <div class="app-layout">
+
+        <!-- ═══════════════════════════════════
+             SIDEBAR
+             ═══════════════════════════════════ -->
+        <aside class="sidebar" id="appSidebar">
+
+            <div class="sidebar-top">
+
+                <!-- Brand -->
+                <div class="brand-section">
+                    <div class="brand-icon">
+                        <i class="fa-solid fa-gem"></i>
+                    </div>
+                    <div class="brand-text">
+                        <div class="brand-title">FashionBI</div>
+                        <div class="brand-subtitle">Retail Intelligence</div>
+                    </div>
+                </div>
+
+                <!-- Nav label -->
+                <div class="sidebar-label">Analytics</div>
+
+                <!-- Primary navigation -->
+                <nav class="sidebar-nav" aria-label="Primary navigation">
+
+                    <a asp-controller="Dashboard" asp-action="Index" class="@(NavClass("Dashboard"))">
+                        <span class="sidebar-icon"><i class="fa-solid fa-chart-line"></i></span>
+                        <span class="sidebar-link-text">Executive Dashboard</span>
+                    </a>
+
+                    <a asp-controller="Sales" asp-action="Index" class="@(NavClass("Sales"))">
+                        <span class="sidebar-icon"><i class="fa-solid fa-chart-column"></i></span>
+                        <span class="sidebar-link-text">Sales Analytics</span>
+                    </a>
+
+                    <a asp-controller="Inventories" asp-action="Index" class="@(NavClass("Inventories"))">
+                        <span class="sidebar-icon"><i class="fa-solid fa-boxes-stacked"></i></span>
+                        <span class="sidebar-link-text">Inventory Intelligence</span>
+                    </a>
+
+                    <a asp-controller="StoreComparison" asp-action="Index" class="@(NavClass("StoreComparison"))">
+                        <span class="sidebar-icon"><i class="fa-solid fa-building"></i></span>
+                        <span class="sidebar-link-text">Store Comparison</span>
+                    </a>
+
+                    <a href="#" class="sidebar-link">
+                        <span class="sidebar-icon"><i class="fa-solid fa-chart-simple"></i></span>
+                        <span class="sidebar-link-text">Forecasting</span>
+                    </a>
+
+                    <a href="#" class="sidebar-link">
+                        <span class="sidebar-icon"><i class="fa-solid fa-wand-magic-sparkles"></i></span>
+                        <span class="sidebar-link-text">Smart Insights</span>
+                    </a>
+
+                    <a href="#" class="sidebar-link">
+                        <span class="sidebar-icon"><i class="fa-solid fa-leaf"></i></span>
+                        <span class="sidebar-link-text">Sustainability</span>
+                    </a>
+
+                </nav>
+
+            </div>
+
+            <!-- ─── User / workspace area ─── -->
+            <div class="sidebar-bottom">
+                <div class="user-menu-container" id="userMenuContainer">
+
+                    <!-- Floating popover (anchored above the trigger) -->
+                    <div class="user-menu-popover" id="userMenuPopover" role="menu">
+
+                        <div class="user-menu-header">
+                            <div class="user-avatar-sm">SG</div>
+                            <div class="user-menu-header-text">
+                                <div class="user-menu-name">Sonia Galdea</div>
+                                <div class="user-menu-email">sonny_galdea@@yahoo.com</div>
+                            </div>
+                        </div>
+
+                        <div class="user-menu-divider"></div>
+
+                        <a href="#" class="user-menu-item" role="menuitem">
+                            <i class="fa-regular fa-user"></i>
+                            <span>Account Settings</span>
+                        </a>
+
+                        <a asp-controller="StoreConnection" asp-action="Index" class="user-menu-item" role="menuitem">
+                            <i class="fa-solid fa-plug-circle-check"></i>
+                            <span>Store Connections</span>
+                        </a>
+
+                        <a href="#" class="user-menu-item" role="menuitem">
+                            <i class="fa-regular fa-bell"></i>
+                            <span>Notification Preferences</span>
+                        </a>
+
+                        <div class="user-menu-divider"></div>
+
+                        <a href="#" class="user-menu-item user-menu-item-danger" role="menuitem">
+                            <i class="fa-solid fa-arrow-right-from-bracket"></i>
+                            <span>Logout</span>
+                        </a>
+
+                    </div>
+
+                    <!-- Trigger button -->
+                    <button class="sidebar-user" id="userMenuTrigger" type="button" aria-haspopup="true" aria-expanded="false">
+                        <div class="user-avatar" aria-hidden="true">SG</div>
+                        <div class="user-info">
+                            <div class="user-name">Sonia Galdea</div>
+                            <div class="user-role">Retail BI Analyst</div>
+                        </div>
+                        <i class="fa-solid fa-chevron-up user-chevron" aria-hidden="true"></i>
+                    </button>
+
+                </div>
+            </div>
+
+        </aside>
+
+        <!-- Restore sidebar collapse state immediately (prevents layout flash) -->
+        <script>
+            (function () {
+                if (localStorage.getItem("bi-sidebar-collapsed") === "1") {
+                    document.getElementById("appSidebar").classList.add("sidebar-collapsed");
+                }
+            })();
+        </script>
+
+        <!-- ═══════════════════════════════════
+             MAIN WRAPPER
+             ═══════════════════════════════════ -->
+        <div class="main-wrapper">
+
+            <!-- TOPBAR -->
+            <header class="topbar">
+
+                <div class="topbar-left">
+
+                    <button class="menu-button" type="button" id="sidebarToggle" aria-label="Toggle sidebar">
+                        <i class="fa-solid fa-bars"></i>
+                    </button>
+
+                    <div class="search-box">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <input type="text"
+                               placeholder="Search products, SKUs, stores..."
+                               autocomplete="off"
+                               aria-label="Global search" />
+                        <span class="search-kbd">⌘K</span>
+                    </div>
+
+                </div>
+
+                <div class="topbar-right">
+
+                    <!-- GLOBAL STORE SCOPE SELECTOR (hidden on Store Comparison) -->
+                    <div class="scope-selector" id="scopeSelector" @(currentController == "StoreComparison" ? "style=\"display:none\"" : "")>
+
+                        <button class="scope-button" type="button" id="scopeToggle" aria-haspopup="true" aria-expanded="false">
+                            <i class="fa-solid fa-store"></i>
+                            <span id="scopeLabel">@(selectedStoreIds.Any() ? $"{selectedStoreIds.Count} store(s)" : "All Stores")</span>
+                            <i class="fa-solid fa-chevron-down scope-chevron" id="scopeChevron"></i>
+                        </button>
+
+                        <div id="scopeDropdown" class="custom-scope-dropdown" role="dialog" aria-label="Store scope selector">
+                            <div class="scope-dropdown-header">Store Scope</div>
+                            <form method="get" asp-controller="@scopeFormController" asp-action="Index">
+                                <input type="hidden" name="dateRange" value="@layoutDateRange" />
+
+                                <label class="scope-item">
+                                    <input type="checkbox"
+                                           id="allStoresCheckbox"
+                                           @(selectedStoreIds.Any() ? "" : "checked")
+                                           onchange="handleAllStores()" />
+                                    <span>All Stores</span>
+                                </label>
+
+                                <div class="scope-divider"></div>
+
+                                @foreach (var store in layoutStores)
+                                {
+                                    var isChecked = selectedStoreIds.Contains(store.StoreId);
+                                    <label class="scope-item">
+                                        <input type="checkbox"
+                                               name="storeIds"
+                                               value="@store.StoreId"
+                                               @(isChecked ? "checked" : "")
+                                               onchange="updateScopeLabel()" />
+                                        <span>@store.StoreName</span>
+                                    </label>
+                                }
+
+                                <div class="scope-footer">
+                                    <button type="submit" class="apply-scope-btn">Apply Scope</button>
+                                </div>
+
+                            </form>
+                        </div>
+
+                    </div>
+
+                    <!-- NOTIFICATION BELL -->
+                    <button class="notification-button" type="button" aria-label="Notifications">
+                        <i class="fa-regular fa-bell"></i>
+                        <span class="notification-dot" aria-hidden="true"></span>
+                    </button>
+
+                </div>
+
+            </header>
+
+            <!-- PAGE CONTENT -->
+            <main class="main-content" id="mainContent">
+                @RenderBody()
+            </main>
+
+        </div>
+
+    </div>
+
+    <!-- Mobile sidebar backdrop -->
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="~/js/site.js" asp-append-version="true"></script>
+
+    <script>
+        // ── Store scope selector ──────────────────────────────────────────
+        const scopeToggle   = document.getElementById("scopeToggle");
+        const scopeDropdown = document.getElementById("scopeDropdown");
+        const scopeChevron  = document.getElementById("scopeChevron");
+
+        scopeToggle.addEventListener("click", function (e) {
+            e.stopPropagation();
+            const open = scopeDropdown.classList.toggle("show");
+            scopeChevron.style.transform = open ? "rotate(180deg)" : "rotate(0)";
+            scopeToggle.setAttribute("aria-expanded", open);
+        });
+
+        function handleAllStores() {
+            const allBox    = document.getElementById("allStoresCheckbox");
+            const storeCBs  = document.querySelectorAll('input[name="storeIds"]');
+            if (allBox.checked) {
+                storeCBs.forEach(cb => cb.checked = false);
+                document.getElementById("scopeLabel").innerText = "All Stores";
+            }
+        }
+
+        function updateScopeLabel() {
+            document.getElementById("allStoresCheckbox").checked = false;
+            const checked = document.querySelectorAll('input[name="storeIds"]:checked');
+            if (checked.length === 0) {
+                document.getElementById("allStoresCheckbox").checked = true;
+                document.getElementById("scopeLabel").innerText = "All Stores";
+                return;
+            }
+            if (checked.length === 1) {
+                document.getElementById("scopeLabel").innerText =
+                    checked[0].closest("label").querySelector("span").innerText;
+                return;
+            }
+            document.getElementById("scopeLabel").innerText = checked.length + " stores selected";
+        }
+
+        // ── User workspace menu ───────────────────────────────────────────
+        const userTrigger  = document.getElementById("userMenuTrigger");
+        const userPopover  = document.getElementById("userMenuPopover");
+
+        userTrigger.addEventListener("click", function (e) {
+            e.stopPropagation();
+            const open = userPopover.classList.toggle("show");
+            userTrigger.classList.toggle("is-open", open);
+            userTrigger.setAttribute("aria-expanded", open);
+        });
+
+        // ── Close all dropdowns on outside click ──────────────────────────
+        document.addEventListener("click", function (e) {
+            if (!document.getElementById("scopeSelector").contains(e.target)) {
+                scopeDropdown.classList.remove("show");
+                scopeChevron.style.transform = "rotate(0)";
+                scopeToggle.setAttribute("aria-expanded", "false");
+            }
+            if (!document.getElementById("userMenuContainer").contains(e.target)) {
+                userPopover.classList.remove("show");
+                userTrigger.classList.remove("is-open");
+                userTrigger.setAttribute("aria-expanded", "false");
+            }
+        });
+
+        // ── Sidebar toggle: collapse on desktop, slide on mobile ─────────
+        const sidebar         = document.getElementById("appSidebar");
+        const sidebarBackdrop = document.getElementById("sidebarBackdrop");
+
+        document.getElementById("sidebarToggle").addEventListener("click", function () {
+            if (window.innerWidth <= 768) {
+                // Mobile: slide in / out
+                sidebar.classList.toggle("sidebar-open");
+                sidebarBackdrop.classList.toggle("show");
+            } else {
+                // Desktop: collapse / expand with state persisted in localStorage
+                const isCollapsed = sidebar.classList.toggle("sidebar-collapsed");
+                localStorage.setItem("bi-sidebar-collapsed", isCollapsed ? "1" : "0");
+            }
+        });
+
+        sidebarBackdrop.addEventListener("click", function () {
+            sidebar.classList.remove("sidebar-open");
+            sidebarBackdrop.classList.remove("show");
+        });
+
+        // ── Keyboard: Escape closes open panels ───────────────────────────
+        document.addEventListener("keydown", function (e) {
+            if (e.key === "Escape") {
+                scopeDropdown.classList.remove("show");
+                scopeChevron.style.transform = "rotate(0)";
+                scopeToggle.setAttribute("aria-expanded", "false");
+                userPopover.classList.remove("show");
+                userTrigger.classList.remove("is-open");
+                userTrigger.setAttribute("aria-expanded", "false");
+                sidebar.classList.remove("sidebar-open");
+                sidebarBackdrop.classList.remove("show");
+            }
+        });
+    </script>
+
+    <script>
+        // Propagate storeIds from current URL to sidebar nav links
+        (function () {
+            var ids = new URLSearchParams(window.location.search).getAll('storeIds');
+            if (!ids.length) return;
+            document.querySelectorAll('.sidebar-nav a.sidebar-link').forEach(function (a) {
+                var href = a.getAttribute('href');
+                if (!href || href === '#') return;
+                var url = new URL(a.href, window.location.origin);
+                url.searchParams.delete('storeIds');
+                ids.forEach(function (id) { url.searchParams.append('storeIds', id); });
+                a.href = url.toString();
+            });
+        })();
+    </script>
+
+    @await RenderSectionAsync("Scripts", required: false)
+
+</body>
+</html>

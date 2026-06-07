@@ -1,0 +1,678 @@
+@using System.Text.Json
+
+@{
+    ViewData["Title"] = "Inventory Intelligence";
+
+    var dateRange       = ViewBag.DateRange as string ?? "30d";
+
+    var totalSKUs       = (int)(ViewBag.TotalSKUs       ?? 0);
+    var unitsOnHand     = (int)(ViewBag.UnitsOnHand     ?? 0);
+    var inventoryValue  = (decimal)(ViewBag.InventoryValue  ?? 0m);
+    var lowStockCount   = (int)(ViewBag.LowStockCount   ?? 0);
+    var outOfStockCount = (int)(ViewBag.OutOfStockCount  ?? 0);
+    var weeksOfCover    = (double)(ViewBag.WeeksOfCover  ?? 0.0);
+
+    var sellThrough     = (double)(ViewBag.SellThroughRate   ?? 0.0);
+    var stockSalesRatio = (double)(ViewBag.StockToSalesRatio ?? 0.0);
+    var invTurnover     = (double)(ViewBag.InvTurnover       ?? 0.0);
+    var overstockCount  = (int)(ViewBag.OverstockCount ?? 0);
+
+    var priCritical = (int)(ViewBag.PriorityCritical ?? 0);
+    var priHigh     = (int)(ViewBag.PriorityHigh     ?? 0);
+    var priMedium   = (int)(ViewBag.PriorityMedium   ?? 0);
+    var priLow      = (int)(ViewBag.PriorityLow      ?? 0);
+
+    var lowStockJson    = ViewBag.LowStockAlerts as string ?? "[]";
+    var deadStockJson   = ViewBag.DeadStockItems as string ?? "[]";
+    var agingLabelsJson = ViewBag.AgingLabels    as string ?? "[]";
+    var agingCountsJson = ViewBag.AgingCounts    as string ?? "[]";
+    var catLabelsJson   = ViewBag.CatLabels      as string ?? "[]";
+    var catValuesJson   = ViewBag.CatValues      as string ?? "[]";
+    var insightsJson    = ViewBag.SmartInsights  as string ?? "[]";
+
+    var wocHigh = weeksOfCover > 24;
+    var wocLow  = weeksOfCover > 0 && weeksOfCover < 2;
+
+    string dateRangeLabel = dateRange switch {
+        "7d"  => "Last 7 Days",
+        "30d" => "Last 30 Days",
+        "90d" => "Last 90 Days",
+        "12m" => "Last 12 Months",
+        "all" => "All Time",
+        _     => "Last 30 Days"
+    };
+
+    var alertArr = JsonSerializer.Deserialize<JsonElement>(lowStockJson);
+    var deadArr  = JsonSerializer.Deserialize<JsonElement>(deadStockJson);
+
+    var alertList = alertArr.ValueKind == JsonValueKind.Array
+        ? alertArr.EnumerateArray().ToList() : new List<JsonElement>();
+    var deadList  = deadArr.ValueKind  == JsonValueKind.Array
+        ? deadArr.EnumerateArray().ToList()  : new List<JsonElement>();
+}
+
+<!-- ══════════════════════════════════════════════════════════════════
+     PAGE HEADER
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="dash-header">
+    <div>
+        <h1 class="dash-title">Inventory Intelligence</h1>
+        <p class="dash-subtitle">Stock health, reorder alerts, aging analysis, and dead stock detection</p>
+    </div>
+    <div class="dash-actions">
+
+        <div class="dropdown">
+            <button class="date-range-btn dropdown-toggle" type="button"
+                    data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="fa-regular fa-calendar"></i>
+                @dateRangeLabel
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end shadow-sm border"
+                style="min-width:170px; border-radius:12px; padding:6px; font-size:13px;">
+                <li><a class="dropdown-item dr-item @(dateRange=="7d" ?"active":"")" href="javascript:void(0)" onclick="setDateRange('7d')">Last 7 Days</a></li>
+                <li><a class="dropdown-item dr-item @(dateRange=="30d"?"active":"")" href="javascript:void(0)" onclick="setDateRange('30d')">Last 30 Days</a></li>
+                <li><a class="dropdown-item dr-item @(dateRange=="90d"?"active":"")" href="javascript:void(0)" onclick="setDateRange('90d')">Last 90 Days</a></li>
+                <li><a class="dropdown-item dr-item @(dateRange=="12m"?"active":"")" href="javascript:void(0)" onclick="setDateRange('12m')">Last 12 Months</a></li>
+                <li><hr class="dropdown-divider my-1"></li>
+                <li><a class="dropdown-item dr-item @(dateRange=="all"?"active":"")" href="javascript:void(0)" onclick="setDateRange('all')">All Time</a></li>
+            </ul>
+        </div>
+
+        <a href="#" class="export-btn">
+            <i class="fa-solid fa-arrow-up-from-bracket"></i> Export
+        </a>
+
+    </div>
+</div>
+
+@if ((bool?)ViewBag.NoData == true)
+{
+    <div class="card" style="padding:48px; text-align:center;">
+        <i class="fa-solid fa-boxes-stacked" style="font-size:40px; color:var(--border); margin-bottom:16px; display:block;"></i>
+        <p style="color:var(--muted); font-size:15px; margin:0;">No inventory data found for the selected scope.</p>
+    </div>
+}
+else
+{
+
+<!-- ══════════════════════════════════════════════════════════════════
+     KPI GRID — 6 cards
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="kpi-grid kpi-grid--6">
+
+    <div class="card kpi-card">
+        <div class="card-body">
+            <div class="kpi-top">
+                <span class="kpi-label">Total SKUs</span>
+                <div class="kpi-icon slate"><i class="fa-solid fa-cubes-stacked"></i></div>
+            </div>
+            <div class="kpi-value">@totalSKUs.ToString("N0")</div>
+            <div class="kpi-footer"><span class="kpi-pill slate">Active products</span></div>
+        </div>
+    </div>
+
+    <div class="card kpi-card">
+        <div class="card-body">
+            <div class="kpi-top">
+                <span class="kpi-label">Units on Hand</span>
+                <div class="kpi-icon indigo"><i class="fa-solid fa-warehouse"></i></div>
+            </div>
+            <div class="kpi-value">@unitsOnHand.ToString("N0")</div>
+            <div class="kpi-footer"><span class="kpi-pill indigo">Total in stock</span></div>
+        </div>
+    </div>
+
+    <div class="card kpi-card">
+        <div class="card-body">
+            <div class="kpi-top">
+                <span class="kpi-label">Inventory Value</span>
+                <div class="kpi-icon indigo"><i class="fa-solid fa-coins"></i></div>
+            </div>
+            <div class="kpi-value">€@inventoryValue.ToString("N0")</div>
+            <div class="kpi-footer"><span class="kpi-pill slate">At retail price</span></div>
+        </div>
+    </div>
+
+    <div class="card kpi-card">
+        <div class="card-body">
+            <div class="kpi-top">
+                <span class="kpi-label">Low Stock</span>
+                <div class="kpi-icon @(lowStockCount > 0 ? "amber" : "emerald")">
+                    <i class="fa-solid @(lowStockCount > 0 ? "fa-triangle-exclamation" : "fa-circle-check")"></i>
+                </div>
+            </div>
+            <div class="kpi-value">@lowStockCount</div>
+            <div class="kpi-footer">
+                @if (lowStockCount > 0)
+                {
+                    <span class="kpi-pill amber"><i class="fa-solid fa-triangle-exclamation"></i> @lowStockCount need action</span>
+                }
+                else
+                {
+                    <span class="kpi-pill emerald"><i class="fa-solid fa-circle-check"></i> All clear</span>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="card kpi-card">
+        <div class="card-body">
+            <div class="kpi-top">
+                <span class="kpi-label">Out of Stock</span>
+                <div class="kpi-icon @(outOfStockCount > 0 ? "red" : "emerald")">
+                    <i class="fa-solid @(outOfStockCount > 0 ? "fa-circle-xmark" : "fa-circle-check")"></i>
+                </div>
+            </div>
+            <div class="kpi-value">@outOfStockCount</div>
+            <div class="kpi-footer">
+                @if (outOfStockCount > 0)
+                {
+                    <span class="kpi-pill red"><i class="fa-solid fa-circle-xmark"></i> @outOfStockCount critical</span>
+                }
+                else
+                {
+                    <span class="kpi-pill emerald"><i class="fa-solid fa-circle-check"></i> None out of stock</span>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="card kpi-card">
+        <div class="card-body">
+            <div class="kpi-top">
+                <span class="kpi-label">Weeks of Cover</span>
+                <div class="kpi-icon @(wocHigh ? "amber" : wocLow ? "red" : "emerald")">
+                    <i class="fa-solid fa-clock-rotate-left"></i>
+                </div>
+            </div>
+            @if (wocHigh)
+            {
+                <div class="kpi-value smaller">High cover</div>
+                <div class="kpi-footer"><span class="kpi-pill amber"><i class="fa-solid fa-triangle-exclamation"></i> Overstock risk</span></div>
+            }
+            else if (wocLow)
+            {
+                <div class="kpi-value">@weeksOfCover.ToString("F1")<small style="font-size:14px;font-weight:500;color:var(--muted);">w</small></div>
+                <div class="kpi-footer"><span class="kpi-pill red"><i class="fa-solid fa-circle-xmark"></i> Low — reorder soon</span></div>
+            }
+            else
+            {
+                <div class="kpi-value">@weeksOfCover.ToString("F1")<small style="font-size:14px;font-weight:500;color:var(--muted);">w</small></div>
+                <div class="kpi-footer"><span class="kpi-pill emerald"><i class="fa-solid fa-circle-check"></i> Healthy coverage</span></div>
+            }
+        </div>
+    </div>
+
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     ROW 2 — Inventory Aging | Stock Health
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="row g-4 mb-4">
+
+    <div class="col-lg-7 col-12">
+        <div class="card h-100">
+            <div class="card-header">
+                <div class="chart-card-title">Inventory Aging</div>
+                <div class="chart-card-subtitle">Days since last restock, by SKU count</div>
+            </div>
+            <div class="card-body">
+                <div class="chart-wrap" style="height:260px;">
+                    <canvas id="agingChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-5 col-12">
+        <div class="card h-100">
+            <div class="card-header">
+                <div class="chart-card-title">Stock Health</div>
+                <div class="chart-card-subtitle">Key inventory performance indicators</div>
+            </div>
+            <div class="card-body">
+                <ul class="stock-health-list">
+
+                    <li class="stock-health-item">
+                        <div class="stock-health-label">
+                            <span>Sell-through Rate</span>
+                            <span class="stock-health-hint">Sold ÷ (Sold + On-hand)</span>
+                        </div>
+                        <div class="stock-health-value @(sellThrough < 20 ? "val--danger" : sellThrough > 60 ? "val--success" : "")">
+                            @sellThrough.ToString("F1")%
+                        </div>
+                    </li>
+
+                    <li class="stock-health-item">
+                        <div class="stock-health-label">
+                            <span>Stock-to-Sales Ratio</span>
+                            <span class="stock-health-hint">On-hand ÷ Period units sold</span>
+                        </div>
+                        <div class="stock-health-value @(stockSalesRatio > 5 ? "val--warning" : stockSalesRatio > 0 ? "val--success" : "")">
+                            @stockSalesRatio.ToString("F2")×
+                        </div>
+                    </li>
+
+                    <li class="stock-health-item">
+                        <div class="stock-health-label">
+                            <span>Inventory Turnover</span>
+                            <span class="stock-health-hint">Annualised turns</span>
+                        </div>
+                        <div class="stock-health-value @(invTurnover < 2 ? "val--warning" : invTurnover > 6 ? "val--success" : "")">
+                            @invTurnover.ToString("F1")×
+                        </div>
+                    </li>
+
+                    <li class="stock-health-item">
+                        <div class="stock-health-label">
+                            <span>Overstocked SKUs</span>
+                            <span class="stock-health-hint">&gt;8 weeks of cover</span>
+                        </div>
+                        <div class="stock-health-value @(overstockCount > 0 ? "val--warning" : "val--success")">
+                            @overstockCount
+                        </div>
+                    </li>
+
+                </ul>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     ROW 3 — Reorder Priority | Category Value
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="row g-4 mb-4">
+
+    <div class="col-lg-5 col-12">
+        <div class="card h-100">
+            <div class="card-header">
+                <div class="chart-card-title">Reorder Priority</div>
+                <div class="chart-card-subtitle">SKU distribution by stock urgency level</div>
+            </div>
+            <div class="card-body" style="display:flex; align-items:center; gap:28px;">
+                <div style="flex:0 0 180px; height:180px; position:relative;">
+                    <canvas id="priorityChart"></canvas>
+                </div>
+                <ul class="donut-stat-list" style="flex:1; min-width:0;">
+                    <li class="donut-stat-item">
+                        <span class="donut-stat-dot" style="background:#ef4444;"></span>
+                        <span class="donut-stat-label">Critical</span>
+                        <span class="donut-stat-values">@priCritical <small>SKUs</small></span>
+                    </li>
+                    <li class="donut-stat-item">
+                        <span class="donut-stat-dot" style="background:#f97316;"></span>
+                        <span class="donut-stat-label">High</span>
+                        <span class="donut-stat-values">@priHigh <small>SKUs</small></span>
+                    </li>
+                    <li class="donut-stat-item">
+                        <span class="donut-stat-dot" style="background:#f59e0b;"></span>
+                        <span class="donut-stat-label">Medium</span>
+                        <span class="donut-stat-values">@priMedium <small>SKUs</small></span>
+                    </li>
+                    <li class="donut-stat-item">
+                        <span class="donut-stat-dot" style="background:#10b981;"></span>
+                        <span class="donut-stat-label">Low</span>
+                        <span class="donut-stat-values">@priLow <small>SKUs</small></span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-7 col-12">
+        <div class="card h-100">
+            <div class="card-header">
+                <div class="chart-card-title">Inventory Value by Category</div>
+                <div class="chart-card-subtitle">Retail value of on-hand stock per product category</div>
+            </div>
+            <div class="card-body">
+                <div class="chart-wrap" style="height:260px;">
+                    <canvas id="catValueChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     ROW 4 — Low Stock Alerts | Dead Stock
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="row g-4 mb-4">
+
+    <!-- Low Stock Alerts -->
+    <div class="col-lg-6 col-12">
+        <div class="card h-100">
+            <div class="card-header d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="chart-card-title">Low Stock Alerts</div>
+                    <div class="chart-card-subtitle">SKUs at or below minimum threshold</div>
+                </div>
+                @if (alertList.Count > 0)
+                {
+                    <span class="kpi-pill amber" style="font-size:11px;">@alertList.Count need action</span>
+                }
+                else
+                {
+                    <span class="kpi-pill emerald" style="font-size:11px;"><i class="fa-solid fa-circle-check"></i> All clear</span>
+                }
+            </div>
+            @if (alertList.Count == 0)
+            {
+                <div class="card-body">
+                    <div class="alert-item success" style="margin:0;">
+                        <i class="fa-solid fa-circle-check"></i>
+                        <div>
+                            <div class="alert-item-title">Inventory levels healthy</div>
+                            All SKUs are currently above their minimum stock thresholds.
+                        </div>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="card-body p-0">
+                    <table class="top-products-table">
+                        <thead>
+                            <tr>
+                                <th>Product</th>
+                                <th style="text-align:right;">Stock</th>
+                                <th style="text-align:right;">Min</th>
+                                <th style="min-width:120px;">Gap</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in alertList)
+                            {
+                                var isOut  = item.GetProperty("IsOutOfStock").GetBoolean();
+                                var stock  = item.GetProperty("CurrentStock").GetInt32();
+                                var min    = item.GetProperty("MinThreshold").GetInt32();
+                                var gap    = item.GetProperty("Gap").GetInt32();
+                                var gapPct = min > 0 ? Math.Min((double)gap / min * 100, 100) : 100;
+                                <tr>
+                                    <td>
+                                        <span class="top-products-name">@item.GetProperty("ProductName").GetString()</span><br />
+                                        <span class="top-products-cat">@item.GetProperty("Category").GetString()</span>
+                                    </td>
+                                    <td style="text-align:right;">
+                                        @if (isOut)
+                                        {
+                                            <span class="kpi-pill red" style="font-size:10px;">OUT</span>
+                                        }
+                                        else
+                                        {
+                                            <span style="font-weight:700; color:var(--warning);">@stock</span>
+                                        }
+                                    </td>
+                                    <td style="text-align:right; color:var(--muted);">@min</td>
+                                    <td>
+                                        <div class="inv-stock-bar">
+                                            <div class="inv-stock-bar-track">
+                                                <div class="inv-stock-bar-fill @(isOut ? "inv-stock-bar-fill--critical" : "")"
+                                                     style="width:@gapPct.ToString("F0")%"></div>
+                                            </div>
+                                            <span class="inv-stock-bar-label">−@gap</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Dead Stock -->
+    <div class="col-lg-6 col-12">
+        <div class="card h-100">
+            <div class="card-header d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="chart-card-title">Dead Stock</div>
+                    <div class="chart-card-subtitle">In-stock items with no sales for 90+ days</div>
+                </div>
+                @if (deadList.Count > 0)
+                {
+                    <span class="kpi-pill amber" style="font-size:11px;">@deadList.Count items</span>
+                }
+                else
+                {
+                    <span class="kpi-pill emerald" style="font-size:11px;"><i class="fa-solid fa-circle-check"></i> None detected</span>
+                }
+            </div>
+            @if (deadList.Count == 0)
+            {
+                <div class="card-body">
+                    <div class="alert-item success" style="margin:0;">
+                        <i class="fa-solid fa-circle-check"></i>
+                        <div>
+                            <div class="alert-item-title">No dead stock detected</div>
+                            All in-stock items have had sales activity within the last 90 days.
+                        </div>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="card-body p-0">
+                    <table class="top-products-table">
+                        <thead>
+                            <tr>
+                                <th>Product</th>
+                                <th style="text-align:right;">Units</th>
+                                <th>Idle</th>
+                                <th style="text-align:right;">Value</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in deadList)
+                            {
+                                var idle     = item.GetProperty("IdleDays").GetInt32();
+                                var badgeCls = idle >= 180 ? "dead" : idle >= 120 ? "stale" : "aging";
+                                var val      = item.GetProperty("Value").GetDecimal();
+                                <tr>
+                                    <td>
+                                        <span class="top-products-name">@item.GetProperty("ProductName").GetString()</span><br />
+                                        <span class="top-products-cat">@item.GetProperty("Category").GetString()</span>
+                                    </td>
+                                    <td style="text-align:right; font-weight:700;">@item.GetProperty("CurrentStock").GetInt32()</td>
+                                    <td><span class="inv-idle-badge inv-idle-badge--@badgeCls">@idle d</span></td>
+                                    <td style="text-align:right; font-weight:700; font-size:12.5px;">€@val.ToString("N0")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     ROW 5 — Smart Inventory Insights
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="row g-4 mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="chart-card-title">Smart Inventory Insights</div>
+                    <div class="chart-card-subtitle">Business intelligence from real inventory and sales data</div>
+                </div>
+                <span class="kpi-pill emerald" style="font-size:11px;" id="invInsightCount"></span>
+            </div>
+            <div class="card-body" id="invInsightsBody">
+                <!-- Rendered by JS -->
+            </div>
+        </div>
+    </div>
+</div>
+
+}<!-- end else -->
+
+@section Scripts {
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+
+    const C_INDIGO  = '#5b5fc7';
+    const C_EMERALD = '#10b981';
+    const C_AMBER   = '#f59e0b';
+    const FONT_FAMILY = "'Inter', 'Segoe UI', sans-serif";
+    const TEXT_MUTED  = '#94a3b8';
+    const BORDER_CLR  = '#e8ecf2';
+
+    Chart.defaults.font.family = FONT_FAMILY;
+    Chart.defaults.font.size   = 12;
+    Chart.defaults.color       = TEXT_MUTED;
+
+    const gridOpts = { color: BORDER_CLR, lineWidth: 1, drawBorder: false };
+    const tickOpts = { color: TEXT_MUTED, font: { size: 11 } };
+
+    const agingLabels = @Html.Raw(agingLabelsJson);
+    const agingCounts = @Html.Raw(agingCountsJson);
+    const catLabels   = @Html.Raw(catLabelsJson);
+    const catValues   = @Html.Raw(catValuesJson);
+    const insights    = @Html.Raw(insightsJson);
+    const priData     = [@priCritical, @priHigh, @priMedium, @priLow];
+
+    // ── Inventory Aging bar chart ─────────────────────────────────────────
+    const agingCtx = document.getElementById('agingChart');
+    if (agingCtx) {
+        new Chart(agingCtx, {
+            type: 'bar',
+            data: {
+                labels: agingLabels,
+                datasets: [{
+                    label: 'SKUs',
+                    data:  agingCounts,
+                    backgroundColor: ['#10b981', '#5b5fc7', '#f59e0b', '#f97316', '#ef4444'],
+                    borderRadius: 6,
+                    borderSkipped: false,
+                    barPercentage: 0.6,
+                    categoryPercentage: 0.75
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#fff', borderColor: BORDER_CLR, borderWidth: 1,
+                        titleColor: '#1e293b', bodyColor: '#475569', padding: 12,
+                        callbacks: { label: ctx => ` ${ctx.parsed.y} SKU${ctx.parsed.y !== 1 ? 's' : ''}` }
+                    }
+                },
+                scales: {
+                    x: { grid: { display: false }, ticks: tickOpts },
+                    y: { grid: gridOpts, ticks: { ...tickOpts, stepSize: 1 }, beginAtZero: true }
+                }
+            }
+        });
+    }
+
+    // ── Reorder Priority doughnut ─────────────────────────────────────────
+    const priCtx = document.getElementById('priorityChart');
+    if (priCtx) {
+        new Chart(priCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Critical', 'High', 'Medium', 'Low'],
+                datasets: [{
+                    data:            priData,
+                    backgroundColor: ['#ef4444', '#f97316', '#f59e0b', '#10b981'],
+                    borderWidth:     0,
+                    hoverOffset:     6
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '70%',
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#fff', borderColor: BORDER_CLR, borderWidth: 1,
+                        titleColor: '#1e293b', bodyColor: '#475569', padding: 12,
+                        callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed} SKU${ctx.parsed !== 1 ? 's' : ''}` }
+                    }
+                }
+            }
+        });
+    }
+
+    // ── Category Value horizontal bar ─────────────────────────────────────
+    const catCtx = document.getElementById('catValueChart');
+    if (catCtx && catLabels.length > 0) {
+        new Chart(catCtx, {
+            type: 'bar',
+            data: {
+                labels: catLabels,
+                datasets: [{
+                    label: 'Inventory Value',
+                    data:  catValues,
+                    backgroundColor: 'rgba(91,95,199,0.75)',
+                    borderColor:     C_INDIGO,
+                    borderWidth:     1.5,
+                    borderRadius:    5,
+                    borderSkipped:   false,
+                    barPercentage:   0.6,
+                    categoryPercentage: 0.75
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#fff', borderColor: BORDER_CLR, borderWidth: 1,
+                        titleColor: '#1e293b', bodyColor: '#475569', padding: 12,
+                        callbacks: { label: ctx => ` €${ctx.parsed.x.toLocaleString('en-GB', { maximumFractionDigits: 0 })}` }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: gridOpts,
+                        ticks: { ...tickOpts, callback: v => '€' + (v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v) },
+                        beginAtZero: true
+                    },
+                    y: { grid: { display: false }, ticks: tickOpts }
+                }
+            }
+        });
+    }
+
+    // ── Smart Insights ────────────────────────────────────────────────────
+    (function () {
+        const el    = document.getElementById('invInsightsBody');
+        const badge = document.getElementById('invInsightCount');
+        if (!el || !insights.length) return;
+        const tagMap = { success: 'success', warning: 'warning', danger: 'danger', info: 'info' };
+        el.innerHTML = insights.map(it =>
+            `<div class="alert-item ${tagMap[it.tag] || 'info'}" style="margin-bottom:8px;">
+                <i class="fa-solid ${it.icon}"></i>
+                <div><div class="alert-item-title">${it.title}</div>${it.body}</div>
+            </div>`
+        ).join('');
+        if (badge) badge.textContent = insights.length + ' insights';
+    })();
+
+    // ── Date range navigation ─────────────────────────────────────────────
+    window.setDateRange = function (range) {
+        const url = new URL(window.location.href);
+        const ids = url.searchParams.getAll('storeIds');
+        url.searchParams.set('dateRange', range);
+        url.searchParams.delete('storeIds');
+        ids.forEach(id => url.searchParams.append('storeIds', id));
+        window.location.href = url.toString();
+    };
+
+})();
+</script>
+}

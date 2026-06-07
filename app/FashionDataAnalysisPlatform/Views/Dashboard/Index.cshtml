@@ -1,0 +1,762 @@
+@{
+    ViewData["Title"] = "Executive Dashboard";
+
+    decimal totalRevenue      = (decimal)(ViewBag.TotalRevenue      ?? 0m);
+    int     totalOrders       = (int)    (ViewBag.TotalOrders       ?? 0);
+    int     totalUnits        = (int)    (ViewBag.TotalUnits        ?? 0);
+    decimal grossProfit       = (decimal)(ViewBag.GrossProfit       ?? 0m);
+    decimal averageOrderValue = (decimal)(ViewBag.AverageOrderValue ?? 0m);
+    decimal profitMargin      = (decimal)(ViewBag.ProfitMargin      ?? 0m);
+    string  topCategory       = (string) (ViewBag.TopCategory       ?? "N/A");
+    int     lowStockCount     = (int)    (ViewBag.LowStockCount     ?? 0);
+    string  dateRange         = (string) (ViewBag.DateRange         ?? "all");
+
+    string dateRangeLabel = dateRange switch
+    {
+        "7d"  => "Last 7 Days",
+        "30d" => "Last 30 Days",
+        "90d" => "Last 90 Days",
+        "12m" => "Last 12 Months",
+        _     => "All Time"
+    };
+
+    string marginClass = profitMargin >= 25 ? "emerald"
+                       : profitMargin >= 10 ? "amber"
+                       : "red";
+
+    string stockClass  = lowStockCount == 0 ? "emerald"
+                       : lowStockCount <= 5  ? "amber"
+                       : "red";
+}
+
+<!-- ══════════════════════════════════════════════════════════════════
+     DASHBOARD HEADER
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="dash-header">
+    <div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <h1 class="dash-title">Executive Dashboard</h1>
+            <span class="live-badge" id="liveBadge">
+                <span class="live-dot" id="liveDot"></span>
+                <span id="liveStatus">Live &middot; </span><span id="liveCountdown">30</span><span id="liveUnit">s</span>
+            </span>
+        </div>
+        <p class="dash-subtitle">Business intelligence overview of sales, profitability and inventory</p>
+    </div>
+
+    <div class="dash-actions">
+
+        <!-- Date range dropdown -->
+        <div class="dropdown">
+            <button class="date-range-btn dropdown-toggle"
+                    type="button"
+                    data-bs-toggle="dropdown"
+                    aria-expanded="false">
+                <i class="fa-regular fa-calendar"></i>
+                @dateRangeLabel
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end shadow-sm border" style="min-width:170px; border-radius:12px; padding:6px; font-size:13px;">
+                <li><a class="dropdown-item dr-item @(dateRange == "7d"  ? "active" : "")" href="javascript:void(0)" onclick="setDateRange('7d')">Last 7 Days</a></li>
+                <li><a class="dropdown-item dr-item @(dateRange == "30d" ? "active" : "")" href="javascript:void(0)" onclick="setDateRange('30d')">Last 30 Days</a></li>
+                <li><a class="dropdown-item dr-item @(dateRange == "90d" ? "active" : "")" href="javascript:void(0)" onclick="setDateRange('90d')">Last 90 Days</a></li>
+                <li><a class="dropdown-item dr-item @(dateRange == "12m" ? "active" : "")" href="javascript:void(0)" onclick="setDateRange('12m')">Last 12 Months</a></li>
+                <li><hr class="dropdown-divider my-1"></li>
+                <li><a class="dropdown-item dr-item @(dateRange == "all" ? "active" : "")" href="javascript:void(0)" onclick="setDateRange('all')">All Time</a></li>
+            </ul>
+        </div>
+
+        <!-- Export (placeholder) -->
+        <a href="#" class="export-btn">
+            <i class="fa-solid fa-arrow-up-from-bracket"></i>
+            Export
+        </a>
+
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     KPI GRID — 8 cards
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="kpi-grid">
+
+    <!-- Total Revenue -->
+    <div class="card kpi-card">
+        <div class="card-body">
+            <div class="kpi-top">
+                <span class="kpi-label">Total Revenue</span>
+                <div class="kpi-icon indigo"><i class="fa-solid fa-wallet"></i></div>
+            </div>
+            <div class="kpi-value" id="kv-revenue">€@totalRevenue.ToString("N0")</div>
+            <div class="kpi-footer">
+                <span class="kpi-pill emerald"><i class="fa-solid fa-circle-check"></i> Live data</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Total Orders -->
+    <div class="card kpi-card">
+        <div class="card-body">
+            <div class="kpi-top">
+                <span class="kpi-label">Total Orders</span>
+                <div class="kpi-icon indigo"><i class="fa-solid fa-bag-shopping"></i></div>
+            </div>
+            <div class="kpi-value" id="kv-orders">@totalOrders.ToString("N0")</div>
+            <div class="kpi-footer">
+                <span class="kpi-pill indigo"><i class="fa-solid fa-rotate"></i> Synced from API</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Units Sold -->
+    <div class="card kpi-card">
+        <div class="card-body">
+            <div class="kpi-top">
+                <span class="kpi-label">Units Sold</span>
+                <div class="kpi-icon slate"><i class="fa-solid fa-cube"></i></div>
+            </div>
+            <div class="kpi-value" id="kv-units">@totalUnits.ToString("N0")</div>
+            <div class="kpi-footer">
+                <span class="kpi-pill slate">Retail volume</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Avg Order Value -->
+    <div class="card kpi-card">
+        <div class="card-body">
+            <div class="kpi-top">
+                <span class="kpi-label">Avg Order Value</span>
+                <div class="kpi-icon indigo"><i class="fa-solid fa-receipt"></i></div>
+            </div>
+            <div class="kpi-value" id="kv-aov">€@averageOrderValue.ToString("N2")</div>
+            <div class="kpi-footer">
+                <span class="kpi-pill slate">AOV</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Gross Profit -->
+    <div class="card kpi-card">
+        <div class="card-body">
+            <div class="kpi-top">
+                <span class="kpi-label">Gross Profit</span>
+                <div class="kpi-icon emerald"><i class="fa-solid fa-arrow-trend-up"></i></div>
+            </div>
+            <div class="kpi-value" id="kv-profit">€@grossProfit.ToString("N0")</div>
+            <div class="kpi-footer">
+                <span class="kpi-pill emerald">Profitability</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Profit Margin -->
+    <div class="card kpi-card">
+        <div class="card-body">
+            <div class="kpi-top">
+                <span class="kpi-label">Profit Margin</span>
+                <div class="kpi-icon @marginClass" id="ki-margin"><i class="fa-solid fa-percent"></i></div>
+            </div>
+            <div class="kpi-value" id="kv-margin">@profitMargin.ToString("N1")%</div>
+            <div class="kpi-footer">
+                <span class="kpi-pill @marginClass" id="kp-margin">
+                    @(profitMargin >= 25 ? "Strong margin" : profitMargin >= 10 ? "Healthy" : "Watch margin")
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Top Category -->
+    <div class="card kpi-card">
+        <div class="card-body">
+            <div class="kpi-top">
+                <span class="kpi-label">Top Category</span>
+                <div class="kpi-icon indigo"><i class="fa-solid fa-tag"></i></div>
+            </div>
+            <div class="kpi-value smaller" id="kv-category">@topCategory</div>
+            <div class="kpi-footer">
+                <span class="kpi-pill emerald">Revenue leader</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Low Stock Alerts -->
+    <div class="card kpi-card">
+        <div class="card-body">
+            <div class="kpi-top">
+                <span class="kpi-label">Low Stock Alerts</span>
+                <div class="kpi-icon @stockClass" id="ki-stock"><i class="fa-solid fa-triangle-exclamation"></i></div>
+            </div>
+            <div class="kpi-value" id="kv-stock">@lowStockCount</div>
+            <div class="kpi-footer">
+                <span class="kpi-pill @stockClass" id="kp-stock">
+                    @(lowStockCount == 0 ? "Stock healthy" : lowStockCount <= 5 ? "Monitor stock" : "Action needed")
+                </span>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     CHARTS ROW 1 — Revenue Trend + Sales Channel Distribution
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="row g-4 mb-4">
+
+    <!-- Revenue Trend (area chart) -->
+    <div class="col-lg-8 col-12">
+        <div class="card h-100">
+            <div class="card-header d-flex align-items-start justify-content-between">
+                <div>
+                    <div class="chart-card-title">Revenue Trend</div>
+                    <div class="chart-card-subtitle">Revenue and profit — @dateRangeLabel</div>
+                </div>
+                <div class="d-flex gap-3 align-items-center" style="font-size:12px; color:var(--muted);">
+                    <span class="d-flex align-items-center gap-1"><span style="width:10px;height:3px;border-radius:2px;background:#5b5fc7;display:inline-block;"></span> Revenue</span>
+                    <span class="d-flex align-items-center gap-1"><span style="width:10px;height:3px;border-radius:2px;background:#10b981;display:inline-block;"></span> Profit</span>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="chart-wrap" style="height:260px;">
+                    <canvas id="revenueTrendChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sales Channel Distribution (donut) -->
+    <div class="col-lg-4 col-12">
+        <div class="card h-100">
+            <div class="card-header">
+                <div class="chart-card-title">Sales Channel Distribution</div>
+                <div class="chart-card-subtitle">Revenue share by channel</div>
+            </div>
+            <div class="card-body d-flex flex-column align-items-center justify-content-center">
+                <div class="chart-wrap" style="height:200px; width:200px;">
+                    <canvas id="channelChart"></canvas>
+                </div>
+                <div id="channelLegend" class="chart-legend mt-3 w-100"></div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     CHARTS ROW 2 — Top Performing Products + Profitability by Category
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="row g-4 mb-4">
+
+    <!-- Profitability by Category (grouped bar) -->
+    <div class="col-lg-4 col-12">
+        <div class="card h-100">
+            <div class="card-header d-flex align-items-start justify-content-between">
+                <div>
+                    <div class="chart-card-title">Profitability by Category</div>
+                    <div class="chart-card-subtitle">Revenue vs profit</div>
+                </div>
+                <div class="d-flex gap-2 align-items-center" style="font-size:12px; color:var(--muted);">
+                    <span class="d-flex align-items-center gap-1"><span style="width:10px;height:10px;border-radius:3px;background:#5b5fc7;display:inline-block;"></span> Rev</span>
+                    <span class="d-flex align-items-center gap-1"><span style="width:10px;height:10px;border-radius:3px;background:#10b981;display:inline-block;"></span> Profit</span>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="chart-wrap" style="height:260px;">
+                    <canvas id="profitabilityChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Top Performing Products (table) -->
+    <div class="col-lg-8 col-12">
+        <div class="card h-100">
+            <div class="card-header d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="chart-card-title">Top Performing Products</div>
+                    <div class="chart-card-subtitle">Highest revenue products — @dateRangeLabel</div>
+                </div>
+                <span class="kpi-pill slate" style="font-size:11px;">Top 5</span>
+            </div>
+            <div class="card-body p-0">
+                <table class="top-products-table">
+                    <thead>
+                        <tr>
+                            <th style="width:36px;">#</th>
+                            <th>Product</th>
+                            <th>Category</th>
+                            <th style="text-align:right;">Revenue</th>
+                            <th style="text-align:right;">Units</th>
+                            <th style="text-align:right;">Margin</th>
+                        </tr>
+                    </thead>
+                    <tbody id="topProductsTbody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     BOTTOM ROW — Executive Summary + Smart Alerts
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="row g-4">
+
+    <!-- Executive Summary -->
+    <div class="col-lg-8 col-12">
+        <div class="card h-100">
+            <div class="card-header d-flex align-items-center justify-content-between">
+                <div class="chart-card-title">Executive Summary</div>
+                <span class="kpi-pill slate" style="font-size:11px;">@dateRangeLabel</span>
+            </div>
+            <div class="card-body">
+                <div class="exec-row">
+                    <span class="exec-label">Total Revenue</span>
+                    <span class="exec-value" id="es-revenue">€@totalRevenue.ToString("N2")</span>
+                </div>
+                <div class="exec-row">
+                    <span class="exec-label">Total Orders</span>
+                    <span class="exec-value" id="es-orders">@totalOrders.ToString("N0")</span>
+                </div>
+                <div class="exec-row">
+                    <span class="exec-label">Units Sold</span>
+                    <span class="exec-value" id="es-units">@totalUnits.ToString("N0")</span>
+                </div>
+                <div class="exec-row">
+                    <span class="exec-label">Average Order Value</span>
+                    <span class="exec-value" id="es-aov">€@averageOrderValue.ToString("N2")</span>
+                </div>
+                <div class="exec-row">
+                    <span class="exec-label">Gross Profit</span>
+                    <span class="exec-value" id="es-profit" style="color:var(--success); font-weight:700;">€@grossProfit.ToString("N2")</span>
+                </div>
+                <div class="exec-row">
+                    <span class="exec-label">Profit Margin</span>
+                    <span class="exec-value" id="es-margin">@profitMargin.ToString("N2")%</span>
+                </div>
+                <div class="exec-row">
+                    <span class="exec-label">Top Revenue Category</span>
+                    <span class="exec-value" id="es-category">@topCategory</span>
+                </div>
+                <div class="exec-row">
+                    <span class="exec-label">Low Stock Alerts</span>
+                    <span class="exec-value @(lowStockCount > 0 ? "text-danger" : "")" id="es-stock">@lowStockCount @(lowStockCount == 1 ? "item" : "items")</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Smart Alerts -->
+    <div class="col-lg-4 col-12">
+        <div class="card h-100">
+            <div class="card-header">
+                <div class="chart-card-title">Smart Alerts</div>
+                <div class="chart-card-subtitle">Automated insights from live data</div>
+            </div>
+            <div class="card-body" id="smartAlertsBody">
+
+                @if (lowStockCount == 0)
+                {
+                    <div class="alert-item success">
+                        <i class="fa-solid fa-circle-check"></i>
+                        <div>
+                            <div class="alert-item-title">Inventory Healthy</div>
+                            No products are below their minimum stock threshold.
+                        </div>
+                    </div>
+                }
+                else if (lowStockCount <= 5)
+                {
+                    <div class="alert-item warning">
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                        <div>
+                            <div class="alert-item-title">Stock Monitor</div>
+                            @lowStockCount product(s) are near their minimum stock threshold. Review inventory levels.
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="alert-item danger">
+                        <i class="fa-solid fa-circle-exclamation"></i>
+                        <div>
+                            <div class="alert-item-title">Inventory Risk</div>
+                            @lowStockCount products are below minimum stock. Restocking recommended.
+                        </div>
+                    </div>
+                }
+
+                @if (profitMargin >= 25)
+                {
+                    <div class="alert-item success">
+                        <i class="fa-solid fa-arrow-trend-up"></i>
+                        <div>
+                            <div class="alert-item-title">Strong Profitability</div>
+                            Profit margin of @profitMargin.ToString("N1")% is above the 25% target.
+                        </div>
+                    </div>
+                }
+                else if (profitMargin > 0)
+                {
+                    <div class="alert-item info">
+                        <i class="fa-solid fa-chart-line"></i>
+                        <div>
+                            <div class="alert-item-title">Margin Insight</div>
+                            Current profit margin is @profitMargin.ToString("N1")%. Consider reviewing pricing or cost structure.
+                        </div>
+                    </div>
+                }
+
+                @if (topCategory != "N/A")
+                {
+                    <div class="alert-item info">
+                        <i class="fa-solid fa-tag"></i>
+                        <div>
+                            <div class="alert-item-title">Category Leader</div>
+                            <strong>@topCategory</strong> is currently the highest-revenue product category.
+                        </div>
+                    </div>
+                }
+
+                <div class="alert-item success">
+                    <i class="fa-solid fa-rotate"></i>
+                    <div>
+                        <div class="alert-item-title">Data Sync Active</div>
+                        Dashboard data is synchronised incrementally via the retail API using delta processing.
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+</div>
+
+@section Scripts {
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<script>
+(function () {
+
+    // ── Design tokens ───────────────────────────────────────────────
+    const C_INDIGO  = '#5b5fc7';
+    const C_EMERALD = '#10b981';
+    const C_AMBER   = '#f59e0b';
+    const C_ROSE    = '#f43f5e';
+    const C_VIOLET  = '#8b5cf6';
+    const C_CYAN    = '#06b6d4';
+    const C_PINK    = '#ec4899';
+    const C_LIME    = '#84cc16';
+
+    const PALETTE     = [C_INDIGO, C_EMERALD, C_AMBER, C_ROSE, C_VIOLET, C_CYAN, C_PINK, C_LIME];
+    const FONT_FAMILY = "'Inter', 'Segoe UI', sans-serif";
+    const TEXT_MUTED  = '#94a3b8';
+    const BORDER_CLR  = '#e8ecf2';
+
+    Chart.defaults.font.family = FONT_FAMILY;
+    Chart.defaults.font.size   = 12;
+    Chart.defaults.color       = TEXT_MUTED;
+
+    // ── Server-rendered initial data ────────────────────────────────
+    const trendLabels      = @Html.Raw(ViewBag.TrendLabels      ?? "[]");
+    const trendRevenue     = @Html.Raw(ViewBag.TrendRevenue     ?? "[]");
+    const trendProfit      = @Html.Raw(ViewBag.TrendProfit      ?? "[]");
+    const trendGranularity = '@(ViewBag.TrendGranularity ?? "monthly")';
+    const catLabels        = @Html.Raw(ViewBag.CategoryLabels   ?? "[]");
+    const catRevenue       = @Html.Raw(ViewBag.CategoryRevenue  ?? "[]");
+    const catProfit        = @Html.Raw(ViewBag.CategoryProfit   ?? "[]");
+    const chanLabels       = @Html.Raw(ViewBag.ChannelLabels    ?? "[]");
+    const chanRevenue      = @Html.Raw(ViewBag.ChannelRevenue   ?? "[]");
+    const topProducts      = @Html.Raw(ViewBag.TopProducts      ?? "[]");
+
+    // ── Shared axis/grid options ────────────────────────────────────
+    const gridOpts = { color: BORDER_CLR, lineWidth: 1, drawBorder: false };
+    const tickOpts = { color: TEXT_MUTED, font: { size: 11 } };
+
+    // ── Chart instances (kept for in-place live update) ─────────────
+    let revenueTrendChartInst  = null;
+    let channelChartInst       = null;
+    let profitabilityChartInst = null;
+
+    // ── Utility helpers ─────────────────────────────────────────────
+    function setText(id, val) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = val;
+    }
+    function setClass(id, cls) {
+        const el = document.getElementById(id);
+        if (el) el.className = cls;
+    }
+    function fmt0(n) { return n.toLocaleString('en', { maximumFractionDigits: 0 }); }
+    function fmt1(n) { return n.toLocaleString('en', { minimumFractionDigits: 1, maximumFractionDigits: 1 }); }
+    function fmt2(n) { return n.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+    // ── Revenue Trend ────────────────────────────────────────────────
+    const trendCtx = document.getElementById('revenueTrendChart');
+    if (trendCtx && trendLabels.length) {
+        const n             = trendLabels.length;
+        const ptRadius      = n <= 7 ? 4 : n <= 14 ? 3 : n <= 31 ? 2 : 0;
+        const ptHoverRadius = n <= 31 ? 5 : 3;
+        const maxTicksLimit = trendGranularity === 'daily' && n > 10 ? 10
+                            : trendGranularity === 'monthly' && n > 18 ? 12 : n;
+        const lineTension   = trendGranularity === 'daily' ? 0.15 : 0.38;
+
+        revenueTrendChartInst = new Chart(trendCtx, {
+            type: 'line',
+            data: {
+                labels: trendLabels,
+                datasets: [
+                    { label: 'Revenue', data: trendRevenue, borderColor: C_INDIGO,  backgroundColor: 'rgba(91,95,199,0.08)', borderWidth: 2, pointRadius: ptRadius, pointHoverRadius: ptHoverRadius, fill: true, tension: lineTension },
+                    { label: 'Profit',  data: trendProfit,  borderColor: C_EMERALD, backgroundColor: 'rgba(16,185,129,0.07)', borderWidth: 2, pointRadius: ptRadius, pointHoverRadius: ptHoverRadius, fill: true, tension: lineTension }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#fff', borderColor: BORDER_CLR, borderWidth: 1,
+                        titleColor: '#1e293b', bodyColor: '#475569', padding: 12,
+                        callbacks: { label: ctx => ` ${ctx.dataset.label}: €${ctx.parsed.y.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` }
+                    }
+                },
+                scales: {
+                    x: { grid: { ...gridOpts, drawOnChartArea: false }, ticks: { ...tickOpts, maxTicksLimit, maxRotation: trendGranularity === 'daily' && n > 14 ? 45 : 0, minRotation: 0 } },
+                    y: { grid: gridOpts, ticks: { ...tickOpts, callback: v => '€' + (v >= 1000000 ? (v / 1000000).toFixed(1) + 'M' : v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v) }, beginAtZero: true }
+                }
+            }
+        });
+    }
+
+    // ── Top Performing Products ──────────────────────────────────────
+    function renderTopProducts(products) {
+        const el = document.getElementById('topProductsTbody');
+        if (!el || !products.length) return;
+        el.innerHTML = products.map((p, i) => {
+            const mCls = p.margin >= 25 ? 'high' : p.margin >= 10 ? 'medium' : 'low';
+            const rev  = p.revenue.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            return `<tr>
+                <td><span class="top-products-rank">${i + 1}</span></td>
+                <td><span class="top-products-name">${p.name}</span></td>
+                <td><span class="top-products-cat">${p.category}</span></td>
+                <td style="text-align:right;font-weight:600;color:var(--text-secondary);">€${rev}</td>
+                <td style="text-align:right;color:var(--text-tertiary);">${p.units.toLocaleString('en')}</td>
+                <td style="text-align:right;"><span class="top-products-margin ${mCls}">${p.margin.toFixed(1)}%</span></td>
+            </tr>`;
+        }).join('');
+    }
+    renderTopProducts(topProducts);
+
+    // ── Sales Channel Distribution ───────────────────────────────────
+    function buildChannelLegend(labels, values, colors) {
+        const el = document.getElementById('channelLegend');
+        if (!el) return;
+        const total = values.reduce((a, b) => a + b, 0);
+        el.innerHTML = labels.map((l, i) => {
+            const pct = total > 0 ? ((values[i] / total) * 100).toFixed(1) : '0.0';
+            return `<div class="chart-legend-row">
+                <span class="chart-legend-dot" style="background:${colors[i]}"></span>
+                <span class="chart-legend-label">${l}</span>
+                <span class="chart-legend-pct">${pct}%</span>
+            </div>`;
+        }).join('');
+    }
+
+    const chanCtx = document.getElementById('channelChart');
+    if (chanCtx && chanLabels.length) {
+        const chanColors = chanLabels.map((_, i) => PALETTE[(i + 2) % PALETTE.length]);
+        channelChartInst = new Chart(chanCtx, {
+            type: 'doughnut',
+            data: { labels: chanLabels, datasets: [{ data: chanRevenue, backgroundColor: chanColors, borderColor: '#fff', borderWidth: 3, hoverOffset: 6 }] },
+            options: {
+                responsive: true, maintainAspectRatio: false, cutout: '68%',
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#fff', borderColor: BORDER_CLR, borderWidth: 1,
+                        titleColor: '#1e293b', bodyColor: '#475569', padding: 10,
+                        callbacks: { label: ctx => ` €${ctx.parsed.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` }
+                    }
+                }
+            }
+        });
+        buildChannelLegend(chanLabels, chanRevenue, chanColors);
+    }
+
+    // ── Profitability by Category ────────────────────────────────────
+    const profCtx = document.getElementById('profitabilityChart');
+    if (profCtx && catLabels.length) {
+        profitabilityChartInst = new Chart(profCtx, {
+            type: 'bar',
+            data: {
+                labels: catLabels,
+                datasets: [
+                    { label: 'Revenue', data: catRevenue, backgroundColor: 'rgba(91,95,199,0.80)', borderRadius: 6, borderSkipped: false, barPercentage: 0.55, categoryPercentage: 0.75 },
+                    { label: 'Profit',  data: catProfit,  backgroundColor: 'rgba(16,185,129,0.80)', borderRadius: 6, borderSkipped: false, barPercentage: 0.55, categoryPercentage: 0.75 }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#fff', borderColor: BORDER_CLR, borderWidth: 1,
+                        titleColor: '#1e293b', bodyColor: '#475569', padding: 12,
+                        callbacks: { label: ctx => ` ${ctx.dataset.label}: €${ctx.parsed.y.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` }
+                    }
+                },
+                scales: {
+                    x: { grid: { ...gridOpts, drawOnChartArea: false }, ticks: { ...tickOpts, maxRotation: 35 } },
+                    y: { grid: gridOpts, ticks: { ...tickOpts, callback: v => '€' + (v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v) }, beginAtZero: true }
+                }
+            }
+        });
+    }
+
+    // ── Date range navigation ────────────────────────────────────────
+    window.setDateRange = function (range) {
+        const url = new URL(window.location.href);
+        url.searchParams.set('dateRange', range);
+        window.location.href = url.toString();
+    };
+
+    // ── Live badge helpers ───────────────────────────────────────────
+    function setBadgeLive(sec) {
+        const badge = document.getElementById('liveBadge');
+        if (badge) badge.classList.remove('live-badge--delayed');
+        setText('liveStatus',    'Live · ');
+        setText('liveCountdown', sec);
+        setText('liveUnit',      's');
+    }
+    function setBadgeFetching() {
+        setText('liveStatus',    'Updating…');
+        setText('liveCountdown', '');
+        setText('liveUnit',      '');
+    }
+    function setBadgeDelayed() {
+        const badge = document.getElementById('liveBadge');
+        if (badge) badge.classList.add('live-badge--delayed');
+        setText('liveStatus',    'Sync delayed');
+        setText('liveCountdown', '');
+        setText('liveUnit',      '');
+    }
+
+    // ── Dashboard update functions ───────────────────────────────────
+    function updateKpis(d) {
+        setText('kv-revenue',  '€' + fmt0(d.totalRevenue));
+        setText('kv-orders',   fmt0(d.totalOrders));
+        setText('kv-units',    fmt0(d.totalUnits));
+        setText('kv-aov',      '€' + fmt2(d.averageOrderValue));
+        setText('kv-profit',   '€' + fmt0(d.grossProfit));
+        setText('kv-margin',   fmt1(d.profitMargin) + '%');
+        setText('kv-category', d.topCategory);
+        setText('kv-stock',    String(d.lowStockCount));
+
+        const mCls = d.profitMargin >= 25 ? 'emerald' : d.profitMargin >= 10 ? 'amber' : 'red';
+        setClass('ki-margin', 'kpi-icon ' + mCls);
+        setClass('kp-margin', 'kpi-pill ' + mCls);
+        setText('kp-margin',  d.profitMargin >= 25 ? 'Strong margin' : d.profitMargin >= 10 ? 'Healthy' : 'Watch margin');
+
+        const sCls = d.lowStockCount === 0 ? 'emerald' : d.lowStockCount <= 5 ? 'amber' : 'red';
+        setClass('ki-stock', 'kpi-icon ' + sCls);
+        setClass('kp-stock', 'kpi-pill ' + sCls);
+        setText('kp-stock',  d.lowStockCount === 0 ? 'Stock healthy' : d.lowStockCount <= 5 ? 'Monitor stock' : 'Action needed');
+    }
+
+    function updateExecSummary(d) {
+        setText('es-revenue',  '€' + fmt2(d.totalRevenue));
+        setText('es-orders',   fmt0(d.totalOrders));
+        setText('es-units',    fmt0(d.totalUnits));
+        setText('es-aov',      '€' + fmt2(d.averageOrderValue));
+        setText('es-profit',   '€' + fmt2(d.grossProfit));
+        setText('es-margin',   fmt2(d.profitMargin) + '%');
+        setText('es-category', d.topCategory);
+        const esStock = document.getElementById('es-stock');
+        if (esStock) {
+            esStock.textContent = d.lowStockCount + ' ' + (d.lowStockCount === 1 ? 'item' : 'items');
+            esStock.className   = 'exec-value' + (d.lowStockCount > 0 ? ' text-danger' : '');
+        }
+    }
+
+    function updateCharts(d) {
+        if (revenueTrendChartInst) {
+            revenueTrendChartInst.data.labels           = d.trendLabels;
+            revenueTrendChartInst.data.datasets[0].data = d.trendRevenue;
+            revenueTrendChartInst.data.datasets[1].data = d.trendProfit;
+            revenueTrendChartInst.update('none');
+        }
+        if (channelChartInst) {
+            const colors = d.channelLabels.map((_, i) => PALETTE[(i + 2) % PALETTE.length]);
+            channelChartInst.data.labels                      = d.channelLabels;
+            channelChartInst.data.datasets[0].data            = d.channelRevenue;
+            channelChartInst.data.datasets[0].backgroundColor = colors;
+            channelChartInst.update('none');
+            buildChannelLegend(d.channelLabels, d.channelRevenue, colors);
+        }
+        if (profitabilityChartInst) {
+            profitabilityChartInst.data.labels           = d.categoryLabels;
+            profitabilityChartInst.data.datasets[0].data = d.categoryRevenue;
+            profitabilityChartInst.data.datasets[1].data = d.categoryProfit;
+            profitabilityChartInst.update('none');
+        }
+    }
+
+    function updateAlerts(alerts) {
+        const el = document.getElementById('smartAlertsBody');
+        if (!el) return;
+        el.innerHTML = alerts.map(a => `<div class="alert-item ${a.type}">
+            <i class="fa-solid ${a.icon}"></i>
+            <div><div class="alert-item-title">${a.title}</div>${a.message}</div>
+        </div>`).join('');
+    }
+
+    function applyLiveData(d) {
+        updateKpis(d);
+        updateExecSummary(d);
+        updateCharts(d);
+        renderTopProducts(d.topProducts);
+        updateAlerts(d.alerts);
+    }
+
+    // ── AJAX live refresh every 15 s ─────────────────────────────────
+    const REFRESH_INTERVAL = 15;
+    let countdown  = REFRESH_INTERVAL;
+    let isFetching = false;
+
+    function doRefresh() {
+        if (isFetching) return;
+        isFetching = true;
+        setBadgeFetching();
+
+        fetch('/Dashboard/LiveMetrics' + window.location.search)
+            .then(function (r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
+            .then(function (data) {
+                applyLiveData(data);
+                isFetching = false;
+                setBadgeLive(countdown);
+            })
+            .catch(function () {
+                isFetching = false;
+                setBadgeDelayed();
+            });
+    }
+
+    setInterval(function () {
+        countdown--;
+        if (!isFetching) setText('liveCountdown', Math.max(0, countdown));
+        if (countdown <= 0) {
+            countdown = REFRESH_INTERVAL;
+            doRefresh();
+        }
+    }, 1000);
+
+})();
+</script>
+
+}
