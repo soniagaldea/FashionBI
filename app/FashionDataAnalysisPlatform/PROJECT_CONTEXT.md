@@ -47,7 +47,6 @@ FashionDataAnalysisPlatform/
 │   ├── StoreComparisonController.cs    # Store Comparison analytics
 │   ├── StoreConnectionController.cs    # Store Connections (UI stub)
 │   ├── ProductsController.cs           # Products CRUD
-│   ├── ImportController.cs             # CSV/file import
 │   └── HomeController.cs              # Home/privacy pages
 ├── Models/
 │   ├── Product.cs
@@ -400,9 +399,6 @@ GET /StoreConnection
 | Account Settings | User popover | `href="#"` stub |
 | Logout | User popover | `href="#"` stub |
 | Store Connections page | `/StoreConnection` | View exists (`Views/StoreConnections/Index.cshtml`) but controller returns an empty view with no data |
-
-### Import system
-`ImportController` and `Views/Import/Index.cshtml` exist with associated import models (`ProductImportModel`, `InventoryImportModel`, `SaleImportModel`). Import flow is implemented but not linked from the main navigation.
 
 ### Prediction model
 The `Prediction` entity (PredictionId, ProductId, PredictionDate, PredictedSales, RecommendedStock, ModelName) is fully migrated and in the DbContext but nothing reads or writes to it through the analytics UI. The Forecasting page would consume it.

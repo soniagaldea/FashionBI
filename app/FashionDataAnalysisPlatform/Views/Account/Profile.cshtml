@@ -1,0 +1,111 @@
+@using System.Security.Claims
+@{
+    ViewData["Title"] = "Profile";
+
+    var fullName = User.Identity?.Name ?? "";
+    var email    = User.FindFirst(ClaimTypes.Email)?.Value ?? "";
+    var role     = User.FindFirst(ClaimTypes.Role)?.Value  ?? "";
+    var initials = User.FindFirst("Initials")?.Value       ?? "?";
+
+    var loginAtRaw = User.FindFirst("LoginAt")?.Value;
+    var lastLogin  = !string.IsNullOrEmpty(loginAtRaw)
+        ? DateTime.Parse(loginAtRaw, null, System.Globalization.DateTimeStyles.RoundtripKind)
+                  .ToLocalTime()
+                  .ToString("dd MMM yyyy, HH:mm")
+        : DateTime.Now.ToString("dd MMM yyyy, HH:mm");
+}
+
+<div class="dash-header" style="margin-bottom:24px;">
+    <div>
+        <h1 class="dash-title">Account Profile</h1>
+        <p class="dash-subtitle">Your identity, workspace settings, and session information</p>
+    </div>
+</div>
+
+<div class="profile-layout">
+
+    <!-- ── Identity card (left column) ───────────────────── -->
+    <div class="card profile-card">
+
+        <div class="profile-avatar-wrap">
+            <div class="profile-avatar">@initials</div>
+        </div>
+        <div class="profile-name">@fullName</div>
+        <div class="profile-role">@role</div>
+
+        <div class="profile-divider"></div>
+
+        <div class="profile-fields">
+            <div class="profile-field">
+                <span class="profile-field-label">
+                    <i class="fa-regular fa-envelope"></i>
+                    Email address
+                </span>
+                <span class="profile-field-value">@email</span>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ── Detail panel (right column) ───────────────────── -->
+    <div class="profile-detail-panel">
+
+        <!-- Info grid card -->
+        <div class="card profile-info-section">
+            <div class="profile-section-title">Workspace &amp; Session</div>
+            <div class="profile-info-grid">
+
+                <div class="profile-info-tile">
+                    <div class="profile-info-tile-icon">
+                        <i class="fa-solid fa-cookie-bite"></i>
+                    </div>
+                    <div class="profile-info-tile-label">Authentication Method</div>
+                    <div class="profile-info-tile-value">Cookie Authentication</div>
+                </div>
+
+                <div class="profile-info-tile">
+                    <div class="profile-info-tile-icon profile-info-tile-icon--success">
+                        <i class="fa-solid fa-circle-check"></i>
+                    </div>
+                    <div class="profile-info-tile-label">Session Status</div>
+                    <div class="profile-info-tile-value profile-info-tile-value--success">Active</div>
+                </div>
+
+                <div class="profile-info-tile">
+                    <div class="profile-info-tile-icon">
+                        <partial name="_LogoIcon" />
+                    </div>
+                    <div class="profile-info-tile-label">Workspace</div>
+                    <div class="profile-info-tile-value">FashionBI Analytics</div>
+                </div>
+
+                <div class="profile-info-tile">
+                    <div class="profile-info-tile-icon">
+                        <i class="fa-regular fa-clock"></i>
+                    </div>
+                    <div class="profile-info-tile-label">Last Login</div>
+                    <div class="profile-info-tile-value">@lastLogin</div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Session / sign-out card -->
+        <div class="card profile-signout-card">
+            <div class="profile-section-title">Session Management</div>
+            <p class="profile-signout-desc">
+                You are signed in as <strong>@fullName</strong>.
+                Your session is valid for 8 hours and refreshes automatically while you are active.
+            </p>
+            <form asp-controller="Account" asp-action="Logout" method="post">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="profile-logout-btn">
+                    <i class="fa-solid fa-arrow-right-from-bracket"></i>
+                    Sign Out
+                </button>
+            </form>
+        </div>
+
+    </div>
+
+</div>

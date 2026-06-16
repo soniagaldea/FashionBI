@@ -142,9 +142,14 @@ namespace FashionStoreAPI.Controllers
                 product.Inventory.CurrentStock -= item.Quantity;
                 product.Inventory.LastUpdated = order.OrderDate;
 
-                if (product.Inventory.CurrentStock <= product.Inventory.MinimumStockThreshold)
+                if (product.Inventory.CurrentStock <= product.Inventory.MinimumStockThreshold
+                    && ShouldReplenish(product, order.OrderDate))
                 {
-                    int reorderQuantity = Math.Max(product.Inventory.MinimumStockThreshold * 3, 100);
+                    int reorderQuantity = product.Brand == "Maison Toulouse"
+                        ? Math.Max(product.Inventory.MinimumStockThreshold * 2, 40)
+                        : product.IsSeasonal
+                            ? Math.Max(product.Inventory.MinimumStockThreshold * 2, 100)
+                            : Math.Max(product.Inventory.MinimumStockThreshold * 4, 200);
 
                     product.Inventory.CurrentStock += reorderQuantity;
                     product.Inventory.LastRestockDate = order.OrderDate;
@@ -167,6 +172,52 @@ namespace FashionStoreAPI.Controllers
                 totalAmount = order.TotalAmount,
                 itemsCount = order.OrderItems.Count
             });
+        }
+
+        // Returns the date a season closes for buying purposes.
+        // Matches SEASON_END_DATES in fashion_order_generator.py.
+        private static DateTime? SeasonEnd(string? season) => season switch
+        {
+            "AW24" => new DateTime(2025, 3, 1),
+            "SS25" => new DateTime(2025, 9, 1),
+            "AW25" => new DateTime(2026, 3, 1),
+            "SS26" => new DateTime(2026, 9, 1),
+            _      => null
+        };
+
+        // Decides whether to replenish based on product lifecycle stage.
+        //
+        // Core products are always replenished — they are permanent assortment.
+        // Seasonal products use a probability gate keyed on how many days remain
+        // before the season ends, so that:
+        //   - low-stock alerts accumulate late in the season
+        //   - end-of-season stock runs out (clearance) or becomes dead stock
+        //   - different turnover rates appear between stores and categories
+        private static bool ShouldReplenish(Product product, DateTime orderDate)
+        {
+            if (!product.IsSeasonal)
+                return true;
+
+            var end = SeasonEnd(product.Season);
+            if (end == null)
+                return true; // unrecognised season label — treat as core
+
+            int daysLeft = (end.Value - orderDate).Days;
+
+            // Past season end: no replenishment — remaining stock becomes dead stock.
+            if (daysLeft <= 0)
+                return false;
+
+            // Final 8 weeks (clearance window): deliberate sell-through, zero re-orders.
+            if (daysLeft <= 56)
+                return false;
+
+            // 8–16 weeks out: late season, buyer is cautious — replenish ~30% of the time.
+            if (daysLeft <= 112)
+                return Random.Shared.Next(100) < 30;
+
+            // More than 16 weeks to end: early/mid season — replenish ~80% of the time.
+            return Random.Shared.Next(100) < 80;
         }
     }
 }

@@ -3,12 +3,14 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using FashionDataAnalysisPlatform.Data;
 
 namespace FashionDataAnalysisPlatform.Controllers
 {
+    [Authorize]
     public class StoreComparisonController : Controller
     {
         private readonly AppDbContext _context;
@@ -66,6 +68,26 @@ namespace FashionDataAnalysisPlatform.Controllers
                     OrderId  = s.ExternalOrderId
                 })
                 .ToListAsync();
+
+            // ── 2b. Prior-period sales ────────────────────────────────────────
+            var priorSalesList = new List<(int StoreId, decimal Revenue, decimal Profit, int? OrderId)>();
+            if (cutoff.HasValue)
+            {
+                var priorSpan  = (today - cutoff.Value).TotalDays;
+                var priorEnd   = cutoff.Value;
+                var priorStart = cutoff.Value.AddDays(-priorSpan);
+                var ps = await _context.Sales.AsNoTracking()
+                    .Where(s => s.StoreId != null && allStoreIds.Contains(s.StoreId.Value)
+                             && s.SaleDate >= priorStart && s.SaleDate < priorEnd)
+                    .Select(s => new {
+                        StoreId = s.StoreId!.Value,
+                        s.Revenue,
+                        Profit  = s.Profit ?? 0m,
+                        OrderId = s.ExternalOrderId
+                    })
+                    .ToListAsync();
+                priorSalesList = ps.Select(x => (x.StoreId, x.Revenue, x.Profit, x.OrderId)).ToList();
+            }
 
             // ── 3. Inventory snapshot ─────────────────────────────────────────
             var rawInv = await _context.Inventories.AsNoTracking()
@@ -150,6 +172,13 @@ namespace FashionDataAnalysisPlatform.Controllers
                     return (today - ref_).Days >= 90;
                 });
 
+                var pList   = priorSalesList.Where(s => s.StoreId == sid).ToList();
+                decimal pRev    = pList.Sum(s => s.Revenue);
+                decimal pProfit = pList.Sum(s => s.Profit);
+                int     pOrders = pList.Where(s => s.OrderId.HasValue).Select(s => s.OrderId!.Value).Distinct().Count();
+                decimal pMargin = pRev > 0 ? Math.Round(pProfit / pRev * 100, 1) : 0m;
+                decimal pAov    = pOrders > 0 ? Math.Round(pRev / pOrders, 2) : 0m;
+
                 return new {
                     storeId      = sid,
                     storeName    = store.StoreName,
@@ -168,7 +197,10 @@ namespace FashionDataAnalysisPlatform.Controllers
                     invTurnover,
                     lowStock,
                     oos,
-                    deadStock
+                    deadStock,
+                    prevRevenue  = Math.Round(pRev, 2),
+                    prevMargin   = pMargin,
+                    prevAov      = pAov
                 };
             }).ToList();
 

@@ -1,0 +1,828 @@
+@model FashionDataAnalysisPlatform.ViewModels.SmartInsightsViewModel
+@using System.Text.Json
+@{
+    ViewData["Title"] = "Smart Insights";
+
+    var storeIds = (ViewBag.SelectedStoreIds as List<int>) ?? new List<int>();
+
+    string HealthBg(string cls) => cls == "emerald" ? "#d1fae5" : cls == "amber" ? "#fef3c7" : "#fee2e2";
+    string HealthFg(string cls) => cls == "emerald" ? "#065f46" : cls == "amber" ? "#92400e" : "#991b1b";
+    string HealthBorder(string cls) => cls == "emerald" ? "#6ee7b7" : cls == "amber" ? "#fcd34d" : "#fca5a5";
+    string ScoreBar(int score) => $"{score * 4}%";   // 25 pts = 100 %
+
+    var matrixJson = JsonSerializer.Serialize(
+        Model.Matrix.ToDictionary(
+            kv => kv.Key,
+            kv => new {
+                label      = kv.Value.StrategicLabel,
+                rec        = kv.Value.Recommendation,
+                count      = kv.Value.ProductCount,
+                revPct     = kv.Value.RevenuePercent,
+                products   = kv.Value.Products.Select(p => new {
+                    name  = p.ProductName,
+                    code  = p.ProductCode,
+                    cat   = p.Category,
+                    rev   = p.Revenue,
+                    cv    = p.Cv,
+                    stock = p.CurrentStock,
+                    abc   = p.AbcClass,
+                    xyz   = p.XyzClass
+                })
+            }));
+}
+
+<!-- ══════════════════════════════════════════════════════════════════
+     PAGE HEADER
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="dash-header">
+    <div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <h1 class="dash-title">Smart Insights</h1>
+            <span class="badge rounded-pill"
+                  style="background:var(--indigo-100);color:var(--indigo-600);font-size:11px;font-weight:600;padding:4px 10px;">
+                Prescriptive Analytics
+            </span>
+        </div>
+        <p class="dash-subtitle">Platform intelligence layer — synthesises Sales, Inventory and Forecasting into management actions</p>
+        @if (!Model.HasForecastData)
+        {
+            <p style="font-size:12px;color:#f59e0b;margin:4px 0 0;">
+                <i class="fa-solid fa-triangle-exclamation me-1"></i>Run Forecasting to unlock all insights
+            </p>
+        }
+    </div>
+
+    <div class="dash-actions">
+
+        <span style="font-size:12px;color:var(--muted);white-space:nowrap;">
+            <i class="fa-regular fa-clock me-1"></i>Last refreshed: @Model.LastRefreshedAt.ToString("dd MMM yyyy, HH:mm")
+        </span>
+
+        <button class="export-btn" onclick="exportToPdf('Smart Insights')" title="Export this report as PDF">
+            <i class="fa-solid fa-arrow-up-from-bracket"></i> Export
+        </button>
+
+        <button type="button" class="date-range-btn"
+                data-bs-toggle="modal" data-bs-target="#methodologyModal"
+                title="View analytical methodology">
+            <i class="fa-solid fa-circle-info"></i> Methodology
+        </button>
+
+    </div>
+</div>
+
+@if (!Model.HasSalesData)
+{
+    <div class="d-flex justify-content-center align-items-center" style="min-height:50vh;">
+        <div class="card text-center" style="max-width:480px;width:100%;border-radius:20px;padding:48px 40px;">
+            <div style="width:72px;height:72px;background:var(--indigo-100);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 24px;">
+                <i class="fa-solid fa-wand-magic-sparkles" style="font-size:28px;color:var(--indigo-600);"></i>
+            </div>
+            <h2 style="font-size:20px;font-weight:700;color:var(--text);margin-bottom:8px;">No Sales Data Available</h2>
+            <p style="font-size:14px;color:var(--muted);line-height:1.6;">
+                Smart Insights requires sales data to be present. Please verify that the store
+                connection is active and that at least one data sync has completed successfully.
+            </p>
+        </div>
+    </div>
+    return;
+}
+
+<!-- ══════════════════════════════════════════════════════════════════
+     FINANCIAL IMPACT SUMMARY STRIP
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="row g-3 mb-4">
+
+    <div class="col-md-4">
+        <div class="card" style="border-radius:14px;padding:18px 22px;border:1px solid var(--border);">
+            <div class="d-flex align-items-center gap-2 mb-2">
+                <div style="width:30px;height:30px;border-radius:8px;background:#fee2e2;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                    <i class="fa-solid fa-triangle-exclamation" style="color:#ef4444;font-size:12px;"></i>
+                </div>
+                <span style="font-size:12px;font-weight:600;color:var(--muted);">Revenue at Risk</span>
+            </div>
+            <div style="font-size:24px;font-weight:800;color:#ef4444;line-height:1;">
+                €@Model.TotalRevenueAtRisk.ToString("N0")
+            </div>
+            <div style="font-size:11px;color:var(--muted);margin-top:5px;">
+                @Model.UrgentActions.Count urgent action@(Model.UrgentActions.Count == 1 ? "" : "s") identified
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card" style="border-radius:14px;padding:18px 22px;border:1px solid var(--border);">
+            <div class="d-flex align-items-center gap-2 mb-2">
+                <div style="width:30px;height:30px;border-radius:8px;background:#d1fae5;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                    <i class="fa-solid fa-arrow-trend-up" style="color:#10b981;font-size:12px;"></i>
+                </div>
+                <span style="font-size:12px;font-weight:600;color:var(--muted);">Revenue Upside</span>
+            </div>
+            <div style="font-size:24px;font-weight:800;color:#10b981;line-height:1;">
+                €@Model.TotalRevenueUpside.ToString("N0")
+            </div>
+            <div style="font-size:11px;color:var(--muted);margin-top:5px;">
+                @Model.OpportunityActions.Count growth opportunit@(Model.OpportunityActions.Count == 1 ? "y" : "ies")
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card" style="border-radius:14px;padding:18px 22px;border:1px solid var(--border);">
+            <div class="d-flex align-items-center gap-2 mb-2">
+                <div style="width:30px;height:30px;border-radius:8px;background:#fef3c7;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                    <i class="fa-solid fa-boxes-stacked" style="color:#eab308;font-size:12px;"></i>
+                </div>
+                <span style="font-size:12px;font-weight:600;color:var(--muted);">Overstock Recovery</span>
+            </div>
+            <div style="font-size:24px;font-weight:800;color:#eab308;line-height:1;">
+                €@Model.TotalOverstockRecovery.ToString("N0")
+            </div>
+            <div style="font-size:11px;color:var(--muted);margin-top:5px;">
+                Estimated markdown recovery value
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     SECTION 1 — BUSINESS HEALTH SCORE
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="card mb-4" style="border-radius:16px;padding:28px 32px;border:1px solid var(--border);">
+    <div class="row align-items-center g-4">
+
+        <!-- Score ring + status -->
+        <div class="col-auto text-center" style="min-width:160px;">
+            <div style="width:110px;height:110px;border-radius:50%;
+                        border:8px solid @HealthBorder(Model.HealthColorClass);
+                        background:@HealthBg(Model.HealthColorClass);
+                        display:flex;flex-direction:column;align-items:center;justify-content:center;
+                        margin:0 auto 12px;">
+                <span style="font-size:34px;font-weight:800;color:@HealthFg(Model.HealthColorClass);line-height:1;">
+                    @Model.HealthScore
+                </span>
+                <span style="font-size:11px;font-weight:600;color:@HealthFg(Model.HealthColorClass);">/ 100</span>
+            </div>
+            <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">
+                Overall Health
+            </div>
+            <div style="display:inline-block;padding:5px 14px;border-radius:20px;font-size:13px;font-weight:700;
+                        background:@HealthBg(Model.HealthColorClass);color:@HealthFg(Model.HealthColorClass);
+                        border:1px solid @HealthBorder(Model.HealthColorClass);">
+                @Model.HealthStatus
+            </div>
+        </div>
+
+        <!-- Component bars -->
+        <div class="col">
+            <div class="row g-3">
+                @{
+                    var components = new[] {
+                        ("fa-chart-line",    "Revenue Performance",  Model.RevenueScore,       Model.RevenueScoreLabel,       Model.RevenueScoreDetail),
+                        ("fa-percent",       "Profitability",        Model.ProfitabilityScore, Model.ProfitabilityScoreLabel, Model.ProfitabilityScoreDetail),
+                        ("fa-boxes-stacked", "Inventory Health",     Model.InventoryScore,     Model.InventoryScoreLabel,     Model.InventoryScoreDetail),
+                        ("fa-chart-simple",  "Forecast Reliability", Model.ForecastScore,      Model.ForecastScoreLabel,      Model.ForecastScoreDetail),
+                    };
+                }
+                @foreach (var (icon, label, score, scoreLabel, detail) in components)
+                {
+                    string barColor = score >= 20 ? "#10b981" : score >= 12 ? "#f59e0b" : "#ef4444";
+                    <div class="col-md-6">
+                        <div style="background:var(--sidebar-bg);border-radius:12px;padding:14px 16px;height:100%;">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span style="font-size:13px;font-weight:600;color:var(--text);">
+                                    <i class="fa-solid @icon me-2" style="color:var(--muted);font-size:12px;"></i>@label
+                                </span>
+                                <span style="font-size:13px;font-weight:700;color:@barColor;">@score<span style="font-weight:400;color:var(--muted);font-size:11px;">/25</span></span>
+                            </div>
+                            <div style="background:#e5e7eb;border-radius:6px;height:6px;margin-bottom:8px;">
+                                <div style="width:@ScoreBar(score);background:@barColor;border-radius:6px;height:6px;transition:width .4s ease;"></div>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span style="font-size:11px;font-weight:600;color:@barColor;">@scoreLabel</span>
+                                <span style="font-size:11px;color:var(--muted);">@detail</span>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+            <p style="font-size:13px;color:var(--muted);margin-top:14px;margin-bottom:0;line-height:1.6;">
+                <i class="fa-solid fa-circle-info me-1" style="color:var(--indigo-600);"></i>@Model.HealthExplanation
+            </p>
+        </div>
+
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     SECTION 2 — STRATEGIC ACTION BOARD
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="card mb-4" style="border-radius:16px;padding:0;border:1px solid var(--border);overflow:hidden;">
+
+    <div style="padding:20px 28px 0;border-bottom:1px solid var(--border);">
+        <div class="d-flex align-items-center gap-2 mb-3">
+            <i class="fa-solid fa-wand-magic-sparkles" style="color:var(--indigo-600);font-size:15px;"></i>
+            <h2 style="font-size:16px;font-weight:700;color:var(--text);margin:0;">Strategic Action Board</h2>
+            <span style="margin-left:auto;font-size:12px;font-weight:700;color:#1e293b;
+                         background:#e2e8f0;padding:3px 12px;border-radius:12px;
+                         border:1px solid #cbd5e1;">@Model.TotalActionCount total actions</span>
+        </div>
+
+        <ul class="nav nav-tabs border-0" id="actionTabs" role="tablist" style="gap:4px;">
+            @{
+                var tabs = new[] {
+                    ("urgent",      "<i class=\"fa-solid fa-circle\" style=\"color:#ef4444;font-size:10px;\"></i> Urgent",      Model.UrgentActions.Count,      "#ef4444","#fee2e2"),
+                    ("opportunity", "<i class=\"fa-solid fa-circle\" style=\"color:#f59e0b;font-size:10px;\"></i> Opportunity",  Model.OpportunityActions.Count, "#f59e0b","#fef3c7"),
+                    ("optimize",    "<i class=\"fa-solid fa-circle\" style=\"color:#eab308;font-size:10px;\"></i> Optimize",     Model.OptimizeActions.Count,    "#eab308","#fefce8"),
+                    ("monitor",     "<i class=\"fa-solid fa-circle\" style=\"color:#10b981;font-size:10px;\"></i> Monitor",      Model.MonitorActions.Count,     "#10b981","#d1fae5"),
+                };
+            }
+            @foreach (var (id, label, cnt, fg, bg) in tabs)
+            {
+                bool isFirst = id == "urgent";
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link @(isFirst ? "active" : "")"
+                            id="tab-@id" data-bs-toggle="tab"
+                            data-bs-target="#pane-@id" type="button" role="tab"
+                            style="font-size:13px;font-weight:600;border-radius:8px 8px 0 0;padding:8px 16px;border:none;background:transparent;">
+                        @Html.Raw(label)
+                        <span style="display:inline-block;min-width:20px;padding:1px 7px;border-radius:12px;font-size:11px;font-weight:700;
+                                     background:@bg;color:@fg;margin-left:6px;">@cnt</span>
+                    </button>
+                </li>
+            }
+        </ul>
+    </div>
+
+    <div class="tab-content" id="actionTabContent" style="padding:20px 28px;">
+
+        <!-- ── URGENT ──────────────────────────────────────────────── -->
+        <div class="tab-pane fade show active" id="pane-urgent" role="tabpanel">
+            @if (!Model.UrgentActions.Any())
+            {
+                <div style="text-align:center;padding:40px 20px;color:var(--muted);font-size:14px;">
+                    <i class="fa-solid fa-circle-check" style="font-size:28px;color:#10b981;display:block;margin-bottom:12px;"></i>
+                    No urgent actions — inventory and forecast coverage look healthy.
+                </div>
+            }
+            else
+            {
+                <div class="d-flex flex-column gap-3">
+                    @foreach (var action in Model.UrgentActions)
+                    {
+                        <div style="background:var(--sidebar-bg);border-radius:12px;padding:18px 20px;border-left:4px solid #ef4444;">
+                            <div class="d-flex align-items-start gap-3">
+                                <div style="width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:#fee2e2;">
+                                    <i class="fa-solid @action.Icon" style="font-size:14px;color:#ef4444;"></i>
+                                </div>
+                                <div style="flex:1;min-width:0;">
+                                    <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
+                                        <span style="font-size:14px;font-weight:700;color:var(--text);">@action.Title</span>
+                                        @if (action.EstimatedImpact > 0)
+                                        {
+                                            <span style="display:inline-block;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:700;background:#fee2e2;color:#991b1b;white-space:nowrap;">€@action.EstimatedImpact.ToString("N0") @action.ImpactLabel</span>
+                                        }
+                                        else if (!string.IsNullOrEmpty(action.ImpactLabel))
+                                        {
+                                            <span style="display:inline-block;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:600;background:#e0e7ff;color:#3730a3;">@action.ImpactLabel</span>
+                                        }
+                                    </div>
+                                    <p style="font-size:13px;color:var(--muted);margin:0 0 8px;line-height:1.55;">@action.Explanation</p>
+                                    <div style="font-size:13px;color:var(--text);background:white;border-radius:8px;padding:10px 14px;border:1px solid var(--border);line-height:1.5;">
+                                        <i class="fa-solid fa-lightbulb me-2" style="color:#f59e0b;font-size:12px;"></i>
+                                        <strong>Action:</strong> @action.SuggestedAction
+                                    </div>
+                                    <div class="d-flex gap-2 flex-wrap mt-2">
+                                        @if (!string.IsNullOrEmpty(action.DataBadge)) { <span style="font-size:11px;padding:2px 8px;border-radius:6px;background:#f1f5f9;color:#475569;font-weight:500;"><i class="fa-solid fa-database me-1" style="font-size:9px;"></i>@action.DataBadge</span> }
+                                        @if (!string.IsNullOrEmpty(action.Store)) { <span style="font-size:11px;padding:2px 8px;border-radius:6px;background:#ede9fe;color:#5b21b6;font-weight:500;"><i class="fa-solid fa-store me-1" style="font-size:9px;"></i>@action.Store</span> }
+                                        @if (!string.IsNullOrEmpty(action.ProductCategory)) { <span style="font-size:11px;padding:2px 8px;border-radius:6px;background:#fce7f3;color:#9d174d;font-weight:500;"><i class="fa-solid fa-tag me-1" style="font-size:9px;"></i>@action.ProductCategory</span> }
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        <!-- ── OPPORTUNITY ─────────────────────────────────────────── -->
+        <div class="tab-pane fade" id="pane-opportunity" role="tabpanel">
+            @if (!Model.OpportunityActions.Any())
+            {
+                <div style="text-align:center;padding:40px 20px;color:var(--muted);font-size:14px;">
+                    <i class="fa-solid fa-circle-check" style="font-size:28px;color:#10b981;display:block;margin-bottom:12px;"></i>
+                    No growth opportunities identified in the current period.
+                </div>
+            }
+            else
+            {
+                <div class="d-flex flex-column gap-3">
+                    @foreach (var action in Model.OpportunityActions)
+                    {
+                        <div style="background:var(--sidebar-bg);border-radius:12px;padding:18px 20px;border-left:4px solid #10b981;">
+                            <div class="d-flex align-items-start gap-3">
+                                <div style="width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:#d1fae5;">
+                                    <i class="fa-solid @action.Icon" style="font-size:14px;color:#10b981;"></i>
+                                </div>
+                                <div style="flex:1;min-width:0;">
+                                    <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
+                                        <span style="font-size:14px;font-weight:700;color:var(--text);">@action.Title</span>
+                                        @if (action.EstimatedImpact > 0)
+                                        {
+                                            <span style="display:inline-block;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:700;background:#d1fae5;color:#065f46;white-space:nowrap;">€@action.EstimatedImpact.ToString("N0") @action.ImpactLabel</span>
+                                        }
+                                        else if (!string.IsNullOrEmpty(action.ImpactLabel))
+                                        {
+                                            <span style="display:inline-block;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:600;background:#e0e7ff;color:#3730a3;">@action.ImpactLabel</span>
+                                        }
+                                    </div>
+                                    <p style="font-size:13px;color:var(--muted);margin:0 0 8px;line-height:1.55;">@action.Explanation</p>
+                                    <div style="font-size:13px;color:var(--text);background:white;border-radius:8px;padding:10px 14px;border:1px solid var(--border);line-height:1.5;">
+                                        <i class="fa-solid fa-lightbulb me-2" style="color:#f59e0b;font-size:12px;"></i>
+                                        <strong>Action:</strong> @action.SuggestedAction
+                                    </div>
+                                    <div class="d-flex gap-2 flex-wrap mt-2">
+                                        @if (!string.IsNullOrEmpty(action.DataBadge)) { <span style="font-size:11px;padding:2px 8px;border-radius:6px;background:#f1f5f9;color:#475569;font-weight:500;"><i class="fa-solid fa-database me-1" style="font-size:9px;"></i>@action.DataBadge</span> }
+                                        @if (!string.IsNullOrEmpty(action.Store)) { <span style="font-size:11px;padding:2px 8px;border-radius:6px;background:#ede9fe;color:#5b21b6;font-weight:500;"><i class="fa-solid fa-store me-1" style="font-size:9px;"></i>@action.Store</span> }
+                                        @if (!string.IsNullOrEmpty(action.ProductCategory)) { <span style="font-size:11px;padding:2px 8px;border-radius:6px;background:#fce7f3;color:#9d174d;font-weight:500;"><i class="fa-solid fa-tag me-1" style="font-size:9px;"></i>@action.ProductCategory</span> }
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        <!-- ── OPTIMIZE ────────────────────────────────────────────── -->
+        <div class="tab-pane fade" id="pane-optimize" role="tabpanel">
+            @if (!Model.OptimizeActions.Any())
+            {
+                <div style="text-align:center;padding:40px 20px;color:var(--muted);font-size:14px;">
+                    <i class="fa-solid fa-circle-check" style="font-size:28px;color:#10b981;display:block;margin-bottom:12px;"></i>
+                    No optimisation actions required right now.
+                </div>
+            }
+            else
+            {
+                <div class="d-flex flex-column gap-3">
+                    @foreach (var action in Model.OptimizeActions)
+                    {
+                        <div style="background:var(--sidebar-bg);border-radius:12px;padding:18px 20px;border-left:4px solid #eab308;">
+                            <div class="d-flex align-items-start gap-3">
+                                <div style="width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:#fef3c7;">
+                                    <i class="fa-solid @action.Icon" style="font-size:14px;color:#eab308;"></i>
+                                </div>
+                                <div style="flex:1;min-width:0;">
+                                    <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
+                                        <span style="font-size:14px;font-weight:700;color:var(--text);">@action.Title</span>
+                                        @if (action.EstimatedImpact > 0)
+                                        {
+                                            <span style="display:inline-block;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:700;background:#fef3c7;color:#92400e;white-space:nowrap;">€@action.EstimatedImpact.ToString("N0") @action.ImpactLabel</span>
+                                        }
+                                        else if (!string.IsNullOrEmpty(action.ImpactLabel))
+                                        {
+                                            <span style="display:inline-block;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:600;background:#e0e7ff;color:#3730a3;">@action.ImpactLabel</span>
+                                        }
+                                    </div>
+                                    <p style="font-size:13px;color:var(--muted);margin:0 0 8px;line-height:1.55;">@action.Explanation</p>
+                                    <div style="font-size:13px;color:var(--text);background:white;border-radius:8px;padding:10px 14px;border:1px solid var(--border);line-height:1.5;">
+                                        <i class="fa-solid fa-lightbulb me-2" style="color:#f59e0b;font-size:12px;"></i>
+                                        <strong>Action:</strong> @action.SuggestedAction
+                                    </div>
+                                    <div class="d-flex gap-2 flex-wrap mt-2">
+                                        @if (!string.IsNullOrEmpty(action.DataBadge)) { <span style="font-size:11px;padding:2px 8px;border-radius:6px;background:#f1f5f9;color:#475569;font-weight:500;"><i class="fa-solid fa-database me-1" style="font-size:9px;"></i>@action.DataBadge</span> }
+                                        @if (!string.IsNullOrEmpty(action.Store)) { <span style="font-size:11px;padding:2px 8px;border-radius:6px;background:#ede9fe;color:#5b21b6;font-weight:500;"><i class="fa-solid fa-store me-1" style="font-size:9px;"></i>@action.Store</span> }
+                                        @if (!string.IsNullOrEmpty(action.ProductCategory)) { <span style="font-size:11px;padding:2px 8px;border-radius:6px;background:#fce7f3;color:#9d174d;font-weight:500;"><i class="fa-solid fa-tag me-1" style="font-size:9px;"></i>@action.ProductCategory</span> }
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        <!-- ── MONITOR ─────────────────────────────────────────────── -->
+        <div class="tab-pane fade" id="pane-monitor" role="tabpanel">
+            @if (!Model.MonitorActions.Any())
+            {
+                <div style="text-align:center;padding:40px 20px;color:var(--muted);font-size:14px;">
+                    <i class="fa-solid fa-circle-check" style="font-size:28px;color:#10b981;display:block;margin-bottom:12px;"></i>
+                    No patterns requiring active monitoring at this time.
+                </div>
+            }
+            else
+            {
+                <div class="d-flex flex-column gap-3">
+                    @foreach (var action in Model.MonitorActions)
+                    {
+                        <div style="background:var(--sidebar-bg);border-radius:12px;padding:18px 20px;border-left:4px solid #64748b;">
+                            <div class="d-flex align-items-start gap-3">
+                                <div style="width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:#f1f5f9;">
+                                    <i class="fa-solid @action.Icon" style="font-size:14px;color:#64748b;"></i>
+                                </div>
+                                <div style="flex:1;min-width:0;">
+                                    <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
+                                        <span style="font-size:14px;font-weight:700;color:var(--text);">@action.Title</span>
+                                        @if (action.EstimatedImpact > 0)
+                                        {
+                                            <span style="display:inline-block;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:700;background:#fef3c7;color:#92400e;white-space:nowrap;">€@action.EstimatedImpact.ToString("N0") @action.ImpactLabel</span>
+                                        }
+                                        else if (!string.IsNullOrEmpty(action.ImpactLabel))
+                                        {
+                                            <span style="display:inline-block;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:600;background:#e0e7ff;color:#3730a3;">@action.ImpactLabel</span>
+                                        }
+                                    </div>
+                                    <p style="font-size:13px;color:var(--muted);margin:0 0 8px;line-height:1.55;">@action.Explanation</p>
+                                    <div style="font-size:13px;color:var(--text);background:white;border-radius:8px;padding:10px 14px;border:1px solid var(--border);line-height:1.5;">
+                                        <i class="fa-solid fa-lightbulb me-2" style="color:#f59e0b;font-size:12px;"></i>
+                                        <strong>Action:</strong> @action.SuggestedAction
+                                    </div>
+                                    <div class="d-flex gap-2 flex-wrap mt-2">
+                                        @if (!string.IsNullOrEmpty(action.DataBadge)) { <span style="font-size:11px;padding:2px 8px;border-radius:6px;background:#f1f5f9;color:#475569;font-weight:500;"><i class="fa-solid fa-database me-1" style="font-size:9px;"></i>@action.DataBadge</span> }
+                                        @if (!string.IsNullOrEmpty(action.Store)) { <span style="font-size:11px;padding:2px 8px;border-radius:6px;background:#ede9fe;color:#5b21b6;font-weight:500;"><i class="fa-solid fa-store me-1" style="font-size:9px;"></i>@action.Store</span> }
+                                        @if (!string.IsNullOrEmpty(action.ProductCategory)) { <span style="font-size:11px;padding:2px 8px;border-radius:6px;background:#fce7f3;color:#9d174d;font-weight:500;"><i class="fa-solid fa-tag me-1" style="font-size:9px;"></i>@action.ProductCategory</span> }
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     SECTIONS 3 & 4 — TWO COLUMNS
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="row g-4 mb-4">
+
+    <!-- KPI EXCEPTION DETECTION -->
+    <div class="col-lg-6">
+        <div class="card h-100" style="border-radius:16px;padding:24px 26px;border:1px solid var(--border);display:flex;flex-direction:column;">
+            <div class="d-flex align-items-center gap-2 mb-4">
+                <i class="fa-solid fa-magnifying-glass-chart" style="color:var(--indigo-600);font-size:15px;"></i>
+                <h2 style="font-size:16px;font-weight:700;color:var(--text);margin:0;">KPI Exception Detection</h2>
+                <span style="margin-left:auto;font-size:11px;background:#f1f5f9;color:#475569;
+                             padding:3px 10px;border-radius:10px;font-weight:600;">σ Statistical Control</span>
+            </div>
+
+            @if (!Model.Exceptions.Any())
+            {
+                <div style="text-align:center;padding:32px 20px;color:var(--muted);font-size:14px;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+                    <i class="fa-solid fa-shield-check" style="font-size:28px;color:#10b981;display:block;margin-bottom:12px;"></i>
+                    All KPIs are within expected statistical ranges. No anomalies detected.
+                </div>
+            }
+            else
+            {
+                <div style="overflow-y:auto;max-height:520px;display:flex;flex-direction:column;gap:12px;flex:1;padding-right:4px;">
+                    @foreach (var ex in Model.Exceptions)
+                    {
+                        string exBg     = ex.SeverityColor == "red" ? "#fff1f2" : ex.SeverityColor == "amber" ? "#fffbeb" : "#f0fdf4";
+                        string exBorder = ex.SeverityColor == "red" ? "#fca5a5" : ex.SeverityColor == "amber" ? "#fcd34d" : "#86efac";
+                        string exFg     = ex.SeverityColor == "red" ? "#991b1b" : ex.SeverityColor == "amber" ? "#92400e" : "#166534";
+                        string sigmaSign = ex.DeviationSigma > 0 ? "+" : "";
+                        <div style="border-radius:12px;padding:14px 16px;background:@exBg;border:1px solid @exBorder;flex-shrink:0;">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <i class="fa-solid @ex.Icon" style="color:@exFg;font-size:13px;"></i>
+                                <span style="font-size:13px;font-weight:700;color:@exFg;">@ex.MetricName — @ex.Dimension</span>
+                                <span style="margin-left:auto;font-size:11px;font-weight:700;
+                                             padding:2px 10px;border-radius:10px;
+                                             background:@exBg;color:@exFg;border:1px solid @exBorder;white-space:nowrap;">
+                                    @ex.Severity · @sigmaSign@ex.DeviationSigma.ToString("N1")σ
+                                </span>
+                            </div>
+                            <div class="d-flex gap-3 flex-wrap mb-2" style="font-size:12px;color:var(--muted);">
+                                <span><strong style="color:var(--text);">Expected:</strong> @ex.Unit@ex.ExpectedValue.ToString("N0")</span>
+                                <span><strong style="color:var(--text);">Actual:</strong> @ex.Unit@ex.ActualValue.ToString("N0")</span>
+                                <span><strong style="color:@exFg;">Δ @(ex.DeviationPct > 0 ? "+" : "")@ex.DeviationPct.ToString("N1")%</strong></span>
+                                <span style="font-size:11px;background:#f1f5f9;color:#475569;padding:1px 7px;border-radius:6px;">@ex.DimensionType</span>
+                            </div>
+                            <p style="font-size:12px;color:var(--muted);margin:0;line-height:1.5;">@ex.Explanation</p>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- ABC/XYZ PORTFOLIO MATRIX -->
+    <div class="col-lg-6">
+        <div class="card h-100" style="border-radius:16px;padding:24px 26px;border:1px solid var(--border);">
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <i class="fa-solid fa-table-cells-large" style="color:var(--indigo-600);font-size:15px;"></i>
+                <h2 style="font-size:16px;font-weight:700;color:var(--text);margin:0;">Product Portfolio Matrix</h2>
+                <span style="margin-left:auto;font-size:11px;background:#f1f5f9;color:#475569;
+                             padding:3px 10px;border-radius:10px;font-weight:600;">ABC / XYZ</span>
+            </div>
+            <p style="font-size:12px;color:var(--muted);margin-bottom:18px;line-height:1.5;">
+                @Model.TotalProductCount SKUs · €@Model.TotalPortfolioRevenue.ToString("N0") portfolio revenue (12m)
+                · Click any cell to drill into products
+            </p>
+
+            <!-- Axis labels row -->
+            <div style="display:grid;grid-template-columns:64px 1fr 1fr 1fr;gap:6px;margin-bottom:6px;">
+                <div></div>
+                @foreach (var xyz in new[] { ("X", "Stable"), ("Y", "Variable"), ("Z", "Unpredictable") })
+                {
+                    <div style="text-align:center;font-size:12px;font-weight:700;color:var(--muted);padding:4px;">
+                        @xyz.Item1 &nbsp;<span style="font-weight:400;">@xyz.Item2</span>
+                    </div>
+                }
+            </div>
+
+            @foreach (var abc in new[] { ("A", "High"), ("B", "Mid"), ("C", "Low") })
+            {
+                <div style="display:grid;grid-template-columns:64px 1fr 1fr 1fr;gap:6px;margin-bottom:6px;">
+                    <div style="display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--muted);">
+                        @abc.Item1&nbsp;<span style="font-weight:400;">@abc.Item2</span>
+                    </div>
+                    @foreach (var xyz in new[] { "X", "Y", "Z" })
+                    {
+                        string key = abc.Item1 + xyz;
+                        var cell = Model.Matrix.TryGetValue(key, out var c) ? c : null;
+                        <div onclick="openMatrix('@key')" style="cursor:pointer;border-radius:12px;padding:14px 10px;text-align:center;
+                                      background:@(cell?.CellBg ?? "#f8fafc");
+                                      border:1px solid transparent;
+                                      transition:box-shadow .2s,transform .15s;"
+                             onmouseover="this.style.boxShadow='0 4px 14px rgba(0,0,0,0.10)';this.style.transform='translateY(-2px)';"
+                             onmouseout="this.style.boxShadow='';this.style.transform='';">
+                            <div style="font-size:11px;font-weight:800;color:@(cell?.CellText ?? "#475569");margin-bottom:4px;line-height:1.3;">@key — @(cell?.StrategicLabel ?? "—")</div>
+                            <div style="font-size:26px;font-weight:800;color:@(cell?.CellText ?? "#94a3b8");line-height:1;margin-bottom:4px;">@(cell?.ProductCount ?? 0)</div>
+                            <div style="font-size:13px;font-weight:600;color:@(cell?.CellText ?? "#94a3b8");opacity:.85;">@(cell?.RevenuePercent.ToString("N1") ?? "0.0")% rev</div>
+                        </div>
+                    }
+                </div>
+            }
+
+            <p style="font-size:11px;color:var(--muted);margin-top:10px;margin-bottom:0;line-height:1.5;">
+                ABC: A&nbsp;= top 80% revenue · B&nbsp;= next 15% · C&nbsp;= bottom 5%<br>
+                XYZ: X&nbsp;= CV ≤ 0.3 (stable) · Y&nbsp;= 0.3–0.6 (variable) · Z&nbsp;= &gt; 0.6 (unpredictable)
+            </p>
+        </div>
+    </div>
+
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     ABC/XYZ DRILL-DOWN MODAL
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="matrixModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content" style="border-radius:16px;border:1px solid var(--border);">
+            <div class="modal-header" style="border-bottom:1px solid var(--border);padding:18px 24px;">
+                <div>
+                    <h5 class="modal-title" id="matrixModalTitle" style="font-weight:700;font-size:16px;"></h5>
+                    <p id="matrixModalRec" style="font-size:12px;color:var(--muted);margin:4px 0 0;"></p>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" style="padding:20px 24px;">
+                <div id="matrixModalEmpty" class="text-center" style="padding:32px;color:var(--muted);display:none;">
+                    <i class="fa-solid fa-box-open" style="font-size:24px;display:block;margin-bottom:10px;"></i>
+                    No products classified in this cell.
+                </div>
+                <table class="table table-sm" id="matrixModalTable" style="display:none;font-size:13px;">
+                    <thead>
+                        <tr style="font-size:12px;color:var(--muted);font-weight:600;">
+                            <th>Product</th>
+                            <th>Category</th>
+                            <th class="text-end">12m Revenue</th>
+                            <th class="text-end">CV</th>
+                            <th class="text-end">Stock</th>
+                            <th class="text-center">Class</th>
+                        </tr>
+                    </thead>
+                    <tbody id="matrixModalBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     METHODOLOGY MODAL
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="methodologyModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content" style="border-radius:16px;border:1px solid var(--border);">
+
+            <div class="modal-header" style="border-bottom:1px solid var(--border);padding:20px 26px;">
+                <div>
+                    <h5 class="modal-title" style="font-weight:700;font-size:17px;color:var(--text);">
+                        <i class="fa-solid fa-circle-info me-2" style="color:var(--indigo-600);"></i>Analytical Methodology
+                    </h5>
+                    <p style="font-size:12px;color:var(--muted);margin:4px 0 0;">
+                        Academic transparency — how each Smart Insights section is calculated
+                    </p>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body" style="padding:24px 28px;">
+
+                <!-- ── 1. Business Health Score ─────────────────────────── -->
+                <div class="mb-4 pb-4" style="border-bottom:1px solid var(--border);">
+                    <h6 style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:12px;">
+                        <span style="display:inline-block;width:24px;height:24px;border-radius:6px;background:var(--indigo-100);color:var(--indigo-600);
+                                     font-size:11px;font-weight:800;text-align:center;line-height:24px;margin-right:8px;">1</span>
+                        Business Health Score
+                    </h6>
+                    <p style="font-size:13px;color:var(--muted);margin-bottom:10px;line-height:1.6;">
+                        A composite 0–100 score across four equally-weighted pillars (25 pts each), inspired by the
+                        Balanced Scorecard framework (Kaplan &amp; Norton, 1996).
+                    </p>
+                    <div class="row g-2">
+                        <div class="col-sm-6">
+                            <div style="background:#f8fafc;border-radius:10px;padding:12px 14px;">
+                                <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:4px;">Revenue Performance (0–25)</div>
+                                <div style="font-size:11px;color:var(--muted);line-height:1.5;">
+                                    Score = min(25, (current month revenue ÷ 12-month average) × 20)<br>
+                                    ≥110% = Above Trend · ≥85% = On Track · &lt;85% = Below Trend
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-sm-6">
+                            <div style="background:#f8fafc;border-radius:10px;padding:12px 14px;">
+                                <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:4px;">Profitability (0–25)</div>
+                                <div style="font-size:11px;color:var(--muted);line-height:1.5;">
+                                    Score = min(25, 3-month profit margin ÷ 25% benchmark × 25)<br>
+                                    ≥25% = Strong · ≥15% = Adequate · &lt;15% = Weak
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-sm-6">
+                            <div style="background:#f8fafc;border-radius:10px;padding:12px 14px;">
+                                <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:4px;">Inventory Health (0–25)</div>
+                                <div style="font-size:11px;color:var(--muted);line-height:1.5;">
+                                    Score = round((SKUs above min. threshold ÷ total SKUs) × 25)<br>
+                                    ≥20 = Healthy · ≥12 = Monitor · &lt;12 = At Risk
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-sm-6">
+                            <div style="background:#f8fafc;border-radius:10px;padding:12px 14px;">
+                                <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:4px;">Forecast Reliability (0–25)</div>
+                                <div style="font-size:11px;color:var(--muted);line-height:1.5;">
+                                    Score = min(25, best model accuracy% ÷ 100 × 25)<br>
+                                    ≥70% = High · ≥50% = Medium · &lt;50% = Low Confidence
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="font-size:11px;color:var(--muted);margin-top:10px;padding:8px 12px;background:#f1f5f9;border-radius:8px;">
+                        <strong>Status thresholds:</strong> ≥70 → Healthy (green) · ≥45 → Caution (amber) · &lt;45 → At Risk (red)
+                    </div>
+                </div>
+
+                <!-- ── 2. Strategic Action Board ───────────────────────── -->
+                <div class="mb-4 pb-4" style="border-bottom:1px solid var(--border);">
+                    <h6 style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:12px;">
+                        <span style="display:inline-block;width:24px;height:24px;border-radius:6px;background:var(--indigo-100);color:var(--indigo-600);
+                                     font-size:11px;font-weight:800;text-align:center;line-height:24px;margin-right:8px;">2</span>
+                        Strategic Action Board
+                    </h6>
+                    <p style="font-size:13px;color:var(--muted);margin-bottom:10px;line-height:1.6;">
+                        Actions are generated dynamically from Sales, Inventory and Forecast data. No recommendations are hardcoded.
+                        Each action is sorted descending by estimated financial impact and capped at 6 per category.
+                    </p>
+                    <div style="font-size:12px;color:var(--muted);line-height:1.8;">
+                        <strong style="color:var(--text);"><i class="fa-solid fa-circle" style="color:#ef4444;font-size:10px;"></i> Urgent:</strong>
+                        Forecast inventory gaps (forecasted demand &gt; stock, impact ≥€150) ·
+                        Out-of-stock products with ≥€200/month recent velocity<br>
+                        <strong style="color:var(--text);"><i class="fa-solid fa-circle" style="color:#f59e0b;font-size:10px;"></i> Opportunity:</strong>
+                        Forecast growth &gt;8% QoQ (impact ≥€300) ·
+                        Fastest-growing category &gt;12% QoQ ·
+                        High-AOV channel (&gt;12% above average, share &lt;30%)<br>
+                        <strong style="color:var(--text);"><i class="fa-solid fa-circle" style="color:#eab308;font-size:10px;"></i> Optimize:</strong>
+                        Overstock &gt;2× forecast demand (recovery ≥€400) ·
+                        Category margin &gt;8pp below network average (impact ≥€200)<br>
+                        <strong style="color:var(--text);"><i class="fa-solid fa-circle" style="color:#10b981;font-size:10px;"></i> Monitor:</strong>
+                        Declining trend −5% to −25% QoQ · SKUs below minimum stock threshold
+                    </div>
+                </div>
+
+                <!-- ── 3. KPI Exception Detection ──────────────────────── -->
+                <div class="mb-4 pb-4" style="border-bottom:1px solid var(--border);">
+                    <h6 style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:12px;">
+                        <span style="display:inline-block;width:24px;height:24px;border-radius:6px;background:var(--indigo-100);color:var(--indigo-600);
+                                     font-size:11px;font-weight:800;text-align:center;line-height:24px;margin-right:8px;">3</span>
+                        KPI Exception Detection
+                    </h6>
+                    <p style="font-size:13px;color:var(--muted);margin-bottom:10px;line-height:1.6;">
+                        Based on Statistical Process Control (SPC) — Montgomery, D.C. (2012).
+                        <em>Introduction to Statistical Quality Control</em>. 7th ed. Wiley.
+                    </p>
+                    <div style="font-size:12px;color:var(--muted);line-height:1.8;">
+                        <strong style="color:var(--text);">Method:</strong>
+                        For each dimension (Store / Category), compute μ (mean) and σ (standard deviation)
+                        from the prior 11 months as a rolling baseline. Minimum 4 months required.<br>
+                        <strong style="color:var(--text);">Anomaly condition:</strong>
+                        |(current month − μ)| ÷ σ ≥ 1.5<br>
+                        <strong style="color:var(--text);">Severity:</strong>
+                        |σ| ≥ 2.0 → Critical (negative) or Positive (positive) ·
+                        |σ| ≥ 1.5 → Warning (negative) or Positive (positive)<br>
+                        <strong style="color:var(--text);">Metrics covered:</strong>
+                        Revenue by Store · Revenue by Category · Profit Margin by Category<br>
+                        <strong style="color:var(--text);">Display:</strong>
+                        Top 5 by absolute σ deviation shown; full list expandable
+                    </div>
+                </div>
+
+                <!-- ── 4. ABC/XYZ Portfolio Matrix ─────────────────────── -->
+                <div>
+                    <h6 style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:12px;">
+                        <span style="display:inline-block;width:24px;height:24px;border-radius:6px;background:var(--indigo-100);color:var(--indigo-600);
+                                     font-size:11px;font-weight:800;text-align:center;line-height:24px;margin-right:8px;">4</span>
+                        ABC / XYZ Product Portfolio Matrix
+                    </h6>
+                    <p style="font-size:13px;color:var(--muted);margin-bottom:10px;line-height:1.6;">
+                        Combines Pareto-based ABC revenue classification with XYZ demand-variability classification
+                        (Teunter, Babai &amp; Syntetos, 2010). Based on last 12 months of sales data.
+                    </p>
+                    <div class="row g-2">
+                        <div class="col-sm-6">
+                            <div style="background:#f8fafc;border-radius:10px;padding:12px 14px;">
+                                <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px;">ABC — Revenue Contribution</div>
+                                <div style="font-size:11px;color:var(--muted);line-height:1.7;">
+                                    <strong>A</strong> — Top 80% of cumulative portfolio revenue<br>
+                                    <strong>B</strong> — Next 15% (cumulative 80–95%)<br>
+                                    <strong>C</strong> — Bottom 5% (cumulative &gt;95%)
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-sm-6">
+                            <div style="background:#f8fafc;border-radius:10px;padding:12px 14px;">
+                                <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px;">XYZ — Demand Variability (CV = σ/μ)</div>
+                                <div style="font-size:11px;color:var(--muted);line-height:1.7;">
+                                    <strong>X</strong> — CV ≤ 0.3 (stable, predictable)<br>
+                                    <strong>Y</strong> — CV 0.3–0.6 (variable)<br>
+                                    <strong>Z</strong> — CV &gt; 0.6 (unpredictable) · also &lt;3 months data
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="modal-footer" style="border-top:1px solid var(--border);padding:14px 26px;">
+                <span style="font-size:11px;color:var(--muted);flex:1;">
+                    FashionBI · Prescriptive Analytics Layer · Bachelor Thesis 2026
+                </span>
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    const matrixData = @Html.Raw(matrixJson);
+
+    function openMatrix(key) {
+        const cell = matrixData[key];
+        if (!cell) return;
+
+        document.getElementById('matrixModalTitle').textContent =
+            key + ' — ' + cell.label + ' (' + (cell.count || 0) + ' products · ' + (cell.revPct || 0).toFixed(1) + '% of portfolio revenue)';
+        document.getElementById('matrixModalRec').textContent = cell.rec;
+
+        const products = cell.products || [];
+        const tbody    = document.getElementById('matrixModalBody');
+        const table    = document.getElementById('matrixModalTable');
+        const empty    = document.getElementById('matrixModalEmpty');
+        tbody.innerHTML = '';
+
+        if (!products.length) {
+            table.style.display = 'none';
+            empty.style.display = 'block';
+        } else {
+            empty.style.display = 'none';
+            table.style.display = 'table';
+            products.forEach(p => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><strong style="font-size:13px;">${p.name}</strong><br><span style="font-size:11px;color:#94a3b8;">${p.code}</span></td>
+                    <td><span style="font-size:11px;background:#f1f5f9;color:#475569;padding:2px 7px;border-radius:5px;">${p.cat}</span></td>
+                    <td class="text-end" style="font-weight:600;">€${Number(p.rev).toLocaleString('en-GB', {minimumFractionDigits:0,maximumFractionDigits:0})}</td>
+                    <td class="text-end" style="color:#64748b;">${Number(p.cv).toFixed(3)}</td>
+                    <td class="text-end">${p.stock}</td>
+                    <td class="text-center"><span style="font-weight:700;font-size:12px;
+                        background:${p.abc==='A'?'#d1fae5':p.abc==='B'?'#dbeafe':'#fee2e2'};
+                        color:${p.abc==='A'?'#065f46':p.abc==='B'?'#1e40af':'#991b1b'};
+                        padding:2px 8px;border-radius:6px;">${p.abc}${p.xyz}</span></td>`;
+                tbody.appendChild(tr);
+            });
+        }
+
+        new bootstrap.Modal(document.getElementById('matrixModal')).show();
+    }
+</script>
+}

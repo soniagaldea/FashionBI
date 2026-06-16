@@ -17,6 +17,11 @@ namespace FashionDataAnalysisPlatform.Data
         public DbSet<StoreConnection> StoreConnections => Set<StoreConnection>();
         public DbSet<Store> Stores => Set<Store>();
 
+        // Forecasting module
+        public DbSet<ForecastResult> ForecastResults => Set<ForecastResult>();
+        public DbSet<ForecastAccuracy> ForecastAccuracies => Set<ForecastAccuracy>();
+        public DbSet<ForecastFeatureImportance> ForecastFeatureImportances => Set<ForecastFeatureImportance>();
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);

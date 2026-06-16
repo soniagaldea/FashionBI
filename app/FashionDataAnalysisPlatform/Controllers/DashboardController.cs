@@ -1,10 +1,12 @@
 using FashionDataAnalysisPlatform.Data;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 
 namespace FashionDataAnalysisPlatform.Controllers
 {
+    [Authorize]
     public class DashboardController : Controller
     {
         private readonly AppDbContext _context;
@@ -89,6 +91,38 @@ namespace FashionDataAnalysisPlatform.Controllers
             ViewBag.ProfitMargin      = profitMargin;
             ViewBag.TopCategory       = topCategory?.Category ?? "N/A";
             ViewBag.LowStockCount     = lowStockCount;
+
+            // ── Prior-period KPIs (trend indicators) ───────────────────────
+            decimal priorRevenue = 0, priorProfit = 0;
+            int     priorOrders  = 0, priorUnits  = 0;
+
+            if (cutoff.HasValue)
+            {
+                var span       = (DateTime.Today - cutoff.Value).TotalDays;
+                var priorEnd   = cutoff.Value;
+                var priorStart = cutoff.Value.AddDays(-span);
+
+                var priorQ = _context.Sales.AsNoTracking().AsQueryable();
+                if (storeIds.Any())
+                    priorQ = priorQ.Where(s => s.StoreId.HasValue && storeIds.Contains(s.StoreId.Value));
+                priorQ = priorQ.Where(s => s.SaleDate >= priorStart && s.SaleDate < priorEnd);
+
+                priorRevenue = await priorQ.SumAsync(s => (decimal?)s.Revenue) ?? 0;
+                priorUnits   = await priorQ.SumAsync(s => (int?)s.Quantity)    ?? 0;
+                priorProfit  = await priorQ.SumAsync(s => (decimal?)s.Profit)  ?? 0;
+                priorOrders  = await priorQ
+                    .Where(s => s.ExternalOrderId != null)
+                    .Select(s => s.ExternalOrderId)
+                    .Distinct()
+                    .CountAsync();
+            }
+
+            ViewBag.PriorRevenue = priorRevenue;
+            ViewBag.PriorOrders  = priorOrders;
+            ViewBag.PriorUnits   = priorUnits;
+            ViewBag.PriorProfit  = priorProfit;
+            ViewBag.PriorAov     = priorOrders > 0 ? priorRevenue / priorOrders : 0m;
+            ViewBag.PriorMargin  = priorRevenue > 0 ? priorProfit / priorRevenue * 100 : 0m;
 
             // ── Revenue trend — granularity adapts to selected date range ──
             string[]  trendLabels;

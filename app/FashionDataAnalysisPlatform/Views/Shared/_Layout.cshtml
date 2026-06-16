@@ -1,4 +1,5 @@
 @using Microsoft.EntityFrameworkCore
+@using System.Security.Claims
 @inject FashionDataAnalysisPlatform.Data.AppDbContext DbContext
 
 @{
@@ -17,7 +18,10 @@
         "Sales"           => "Sales",
         "Inventories"     => "Inventories",
         "StoreComparison" => "StoreComparison",
-        _                 => "Dashboard"
+        "Forecasting"     => "Forecasting",
+        "SmartInsights"    => "SmartInsights",
+        "Sustainability"   => "Sustainability",
+        _                  => "Dashboard"
     };
     var layoutDateRange       = ViewBag.DateRange as string ?? "all";
 
@@ -41,6 +45,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/FashionDataAnalysisPlatform.styles.css" asp-append-version="true" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2" />
+    <link rel="icon" type="image/x-icon"  href="/favicon.ico" />
 </head>
 
 <body>
@@ -56,7 +62,7 @@
                 <!-- Brand -->
                 <div class="brand-section">
                     <div class="brand-icon">
-                        <i class="fa-solid fa-gem"></i>
+                        <partial name="_LogoIcon" />
                     </div>
                     <div class="brand-text">
                         <div class="brand-title">FashionBI</div>
@@ -90,17 +96,17 @@
                         <span class="sidebar-link-text">Store Comparison</span>
                     </a>
 
-                    <a href="#" class="sidebar-link">
+                    <a asp-controller="Forecasting" asp-action="Index" class="@(NavClass("Forecasting"))">
                         <span class="sidebar-icon"><i class="fa-solid fa-chart-simple"></i></span>
                         <span class="sidebar-link-text">Forecasting</span>
                     </a>
 
-                    <a href="#" class="sidebar-link">
+                    <a asp-controller="SmartInsights" asp-action="Index" class="@(NavClass("SmartInsights"))">
                         <span class="sidebar-icon"><i class="fa-solid fa-wand-magic-sparkles"></i></span>
                         <span class="sidebar-link-text">Smart Insights</span>
                     </a>
 
-                    <a href="#" class="sidebar-link">
+                    <a asp-controller="Sustainability" asp-action="Index" class="@(NavClass("Sustainability"))">
                         <span class="sidebar-icon"><i class="fa-solid fa-leaf"></i></span>
                         <span class="sidebar-link-text">Sustainability</span>
                     </a>
@@ -117,16 +123,16 @@
                     <div class="user-menu-popover" id="userMenuPopover" role="menu">
 
                         <div class="user-menu-header">
-                            <div class="user-avatar-sm">SG</div>
+                            <div class="user-avatar-sm">@(User.FindFirst("Initials")?.Value ?? "?")</div>
                             <div class="user-menu-header-text">
-                                <div class="user-menu-name">Sonia Galdea</div>
-                                <div class="user-menu-email">sonny_galdea@@yahoo.com</div>
+                                <div class="user-menu-name">@(User.Identity?.Name ?? "")</div>
+                                <div class="user-menu-email">@(User.FindFirst(ClaimTypes.Email)?.Value ?? "")</div>
                             </div>
                         </div>
 
                         <div class="user-menu-divider"></div>
 
-                        <a href="#" class="user-menu-item" role="menuitem">
+                        <a asp-controller="Account" asp-action="Profile" class="user-menu-item" role="menuitem">
                             <i class="fa-regular fa-user"></i>
                             <span>Account Settings</span>
                         </a>
@@ -136,26 +142,29 @@
                             <span>Store Connections</span>
                         </a>
 
-                        <a href="#" class="user-menu-item" role="menuitem">
+                        <a asp-controller="Notification" asp-action="Preferences" class="user-menu-item" role="menuitem">
                             <i class="fa-regular fa-bell"></i>
                             <span>Notification Preferences</span>
                         </a>
 
                         <div class="user-menu-divider"></div>
 
-                        <a href="#" class="user-menu-item user-menu-item-danger" role="menuitem">
-                            <i class="fa-solid fa-arrow-right-from-bracket"></i>
-                            <span>Logout</span>
-                        </a>
+                        <form asp-controller="Account" asp-action="Logout" method="post" class="user-menu-logout-form">
+                            @Html.AntiForgeryToken()
+                            <button type="submit" class="user-menu-item user-menu-item-danger user-menu-logout-btn" role="menuitem">
+                                <i class="fa-solid fa-arrow-right-from-bracket"></i>
+                                <span>Logout</span>
+                            </button>
+                        </form>
 
                     </div>
 
                     <!-- Trigger button -->
                     <button class="sidebar-user" id="userMenuTrigger" type="button" aria-haspopup="true" aria-expanded="false">
-                        <div class="user-avatar" aria-hidden="true">SG</div>
+                        <div class="user-avatar" aria-hidden="true">@(User.FindFirst("Initials")?.Value ?? "?")</div>
                         <div class="user-info">
-                            <div class="user-name">Sonia Galdea</div>
-                            <div class="user-role">Retail BI Analyst</div>
+                            <div class="user-name">@(User.Identity?.Name ?? "")</div>
+                            <div class="user-role">@(User.FindFirst(ClaimTypes.Role)?.Value ?? "")</div>
                         </div>
                         <i class="fa-solid fa-chevron-up user-chevron" aria-hidden="true"></i>
                     </button>
@@ -188,13 +197,22 @@
                         <i class="fa-solid fa-bars"></i>
                     </button>
 
-                    <div class="search-box">
-                        <i class="fa-solid fa-magnifying-glass"></i>
-                        <input type="text"
-                               placeholder="Search products, SKUs, stores..."
-                               autocomplete="off"
-                               aria-label="Global search" />
-                        <span class="search-kbd">⌘K</span>
+                    <div class="search-wrapper">
+                        <div class="search-box">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                            <input type="text"
+                                   id="globalSearchInput"
+                                   placeholder="Search products, SKUs, stores..."
+                                   autocomplete="off"
+                                   aria-label="Global search"
+                                   role="combobox"
+                                   aria-haspopup="listbox"
+                                   aria-autocomplete="list"
+                                   aria-controls="searchDropdown"
+                                   aria-expanded="false" />
+                            <span class="search-kbd" id="searchKbd">Ctrl+K</span>
+                        </div>
+                        <div id="searchDropdown" class="search-dropdown" role="listbox" aria-label="Search suggestions"></div>
                     </div>
 
                 </div>
@@ -247,11 +265,26 @@
 
                     </div>
 
-                    <!-- NOTIFICATION BELL -->
-                    <button class="notification-button" type="button" aria-label="Notifications">
-                        <i class="fa-regular fa-bell"></i>
-                        <span class="notification-dot" aria-hidden="true"></span>
-                    </button>
+                    <!-- NOTIFICATION CENTER -->
+                    <div class="notif-wrapper">
+
+                        <button class="notification-button" type="button" id="notifBellBtn"
+                                aria-label="Notifications" aria-haspopup="true" aria-expanded="false">
+                            <i class="fa-regular fa-bell"></i>
+                            <span class="notif-badge" id="notifBadge" style="display:none" aria-hidden="true">0</span>
+                        </button>
+
+                        <div class="notif-panel" id="notifPanel" role="dialog" aria-label="Notification panel">
+                            <div class="notif-panel-header">
+                                <span class="notif-panel-title">Notifications</span>
+                                <button class="notif-mark-all-btn" id="notifMarkAllRead" type="button">Mark all as read</button>
+                            </div>
+                            <div class="notif-list" id="notifList">
+                                <div class="notif-loading">Loading…</div>
+                            </div>
+                        </div>
+
+                    </div>
 
                 </div>
 
@@ -269,9 +302,22 @@
     <!-- Mobile sidebar backdrop -->
     <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
 
+    <!-- Export toast notification -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index:9999;">
+        <div id="exportToast" class="toast align-items-center border-0" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body fw-medium" id="exportToastBody" style="font-size:13px;">
+                    Report saved as PDF.
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
+    </div>
+
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
     <script src="~/js/site.js" asp-append-version="true"></script>
+    <script src="~/js/export.js" asp-append-version="true"></script>
 
     <script>
         // ── Store scope selector ──────────────────────────────────────────
@@ -368,6 +414,7 @@
                 userTrigger.setAttribute("aria-expanded", "false");
                 sidebar.classList.remove("sidebar-open");
                 sidebarBackdrop.classList.remove("show");
+                // search dropdown closed by its own keydown handler
             }
         });
     </script>
@@ -385,6 +432,354 @@
                 ids.forEach(function (id) { url.searchParams.append('storeIds', id); });
                 a.href = url.toString();
             });
+        })();
+    </script>
+
+    <script>
+        // ── Global Search ─────────────────────────────────────────────────
+        (function () {
+            var input      = document.getElementById('globalSearchInput');
+            var dropdown   = document.getElementById('searchDropdown');
+            var kbd        = document.getElementById('searchKbd');
+            var timer      = null;
+            var activeIdx  = -1;
+
+            var iconMap = {
+                'Product':  { icon: 'fa-tag',         bg: '#e0e7ff', fg: '#4338ca' },
+                'SKU':      { icon: 'fa-barcode',      bg: '#f3e8ff', fg: '#7c3aed' },
+                'Category': { icon: 'fa-layer-group',  bg: '#dcfce7', fg: '#15803d' },
+                'Store':    { icon: 'fa-store',        bg: '#fef3c7', fg: '#b45309' },
+                'Page':     { icon: 'fa-compass',      bg: '#f0f9ff', fg: '#0369a1' }
+            };
+
+            function esc(s) {
+                if (s == null) return '';
+                return String(s)
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;');
+            }
+
+            function getItems() {
+                return dropdown.querySelectorAll('.search-result-item');
+            }
+
+            function setActive(items, idx) {
+                items.forEach(function (el, i) {
+                    el.classList.toggle('sr-active', i === idx);
+                });
+                if (items[idx]) items[idx].scrollIntoView({ block: 'nearest' });
+            }
+
+            function open() {
+                dropdown.classList.add('show');
+                input.setAttribute('aria-expanded', 'true');
+                if (kbd) kbd.style.display = 'none';
+            }
+
+            function close() {
+                dropdown.classList.remove('show');
+                input.setAttribute('aria-expanded', 'false');
+                activeIdx = -1;
+            }
+
+            function render(data, q) {
+                activeIdx = -1;
+                if (!data || data.length === 0) {
+                    dropdown.innerHTML = '<div class="search-empty">No results for <strong>' + esc(q) + '</strong></div>';
+                    open();
+                    return;
+                }
+                var html = data.map(function (r) {
+                    var ic   = iconMap[r.type] || iconMap['Page'];
+                    var cls  = 'sr-badge-' + (r.type || '').toLowerCase();
+                    return '<a class="search-result-item" href="' + esc(r.url) + '">'
+                        + '<div class="search-result-icon" style="background:' + ic.bg + ';color:' + ic.fg + '">'
+                        +   '<i class="fa-solid ' + ic.icon + '"></i>'
+                        + '</div>'
+                        + '<div class="search-result-body">'
+                        +   '<div class="search-result-name">' + esc(r.name) + '</div>'
+                        +   (r.secondary ? '<div class="search-result-secondary">' + esc(r.secondary) + '</div>' : '')
+                        + '</div>'
+                        + '<span class="search-result-badge ' + cls + '">' + esc(r.type) + '</span>'
+                        + '</a>';
+                }).join('');
+                dropdown.innerHTML = html;
+                open();
+            }
+
+            async function fetchResults(q) {
+                try {
+                    var res  = await fetch('/Search/Autocomplete?q=' + encodeURIComponent(q));
+                    var data = await res.json();
+                    render(data, q);
+                } catch (_) {
+                    close();
+                }
+            }
+
+            // Input handler with 200 ms debounce
+            input.addEventListener('input', function () {
+                clearTimeout(timer);
+                var q = input.value.trim();
+                if (q.length < 2) { close(); return; }
+                timer = setTimeout(function () { fetchResults(q); }, 200);
+            });
+
+            // Keyboard navigation
+            input.addEventListener('keydown', function (e) {
+                var items = getItems();
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    activeIdx = Math.min(activeIdx + 1, items.length - 1);
+                    setActive(items, activeIdx);
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    activeIdx = Math.max(activeIdx - 1, 0);
+                    setActive(items, activeIdx);
+                } else if (e.key === 'Enter') {
+                    if (activeIdx >= 0 && items[activeIdx]) {
+                        e.preventDefault();
+                        items[activeIdx].click();
+                    }
+                } else if (e.key === 'Escape') {
+                    close();
+                    input.blur();
+                }
+            });
+
+            // Show Ctrl+K hint when input is cleared and blurred
+            input.addEventListener('blur', function () {
+                if (kbd && !input.value) kbd.style.display = '';
+            });
+
+            // Ctrl+K opens search
+            document.addEventListener('keydown', function (e) {
+                if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+                    e.preventDefault();
+                    input.focus();
+                    input.select();
+                }
+            });
+
+            // Close on outside click
+            document.addEventListener('click', function (e) {
+                if (!input.closest('.search-wrapper').contains(e.target)) {
+                    close();
+                }
+            });
+        })();
+    </script>
+
+    <script>
+        // ── Notification Center ───────────────────────────────────────────────
+        (function () {
+            var bellBtn      = document.getElementById('notifBellBtn');
+            var panel        = document.getElementById('notifPanel');
+            var badge        = document.getElementById('notifBadge');
+            var list         = document.getElementById('notifList');
+            var markAllBtn   = document.getElementById('notifMarkAllRead');
+            var CACHE_KEY    = 'fashionbi-notifs-v2';
+            var READ_KEY     = 'fashionbi-read-notifs-v1';
+            var cache        = null;   // in-memory cache for this page lifetime
+
+            // ── Read-state helpers (localStorage) ────────────────────────
+            function getReadIds() {
+                try { return new Set(JSON.parse(localStorage.getItem(READ_KEY) || '[]')); }
+                catch (_) { return new Set(); }
+            }
+
+            function saveReadIds(set) {
+                try { localStorage.setItem(READ_KEY, JSON.stringify([...set])); } catch (_) {}
+            }
+
+            function markRead(id) {
+                var ids = getReadIds();
+                ids.add(id);
+                saveReadIds(ids);
+            }
+
+            function markAllRead() {
+                if (!cache) return;
+                var ids = getReadIds();
+                cache.forEach(function (n) { ids.add(n.id); });
+                saveReadIds(ids);
+                updateBadge();
+                renderPanel();
+            }
+
+            // ── Badge ─────────────────────────────────────────────────────
+            function updateBadge() {
+                if (!cache) { badge.style.display = 'none'; return; }
+                var readIds = getReadIds();
+                var unread  = cache.filter(function (n) { return !readIds.has(n.id); }).length;
+                if (unread > 0) {
+                    badge.textContent = unread > 9 ? '9+' : String(unread);
+                    badge.style.display = 'flex';
+                } else {
+                    badge.style.display = 'none';
+                }
+            }
+
+            // ── Severity helpers ──────────────────────────────────────────
+            var SEV_COLOR = {
+                'Critical': '#ef4444',
+                'Warning':  '#f59e0b',
+                'Success':  '#10b981',
+                'Info':     '#5b5fc7'
+            };
+
+            var MODULE_ICON = {
+                'Inventory':      'fa-boxes-stacked',
+                'Forecasting':    'fa-chart-simple',
+                'Smart Insights': 'fa-wand-magic-sparkles',
+                'Sustainability': 'fa-leaf'
+            };
+
+            function sevColor(sev) { return SEV_COLOR[sev] || '#5b5fc7'; }
+            function modIcon(mod)  { return MODULE_ICON[mod] || 'fa-bell'; }
+
+            // ── Notification preference helpers ───────────────────────────
+            var PREFS_KEY = 'fashionbi-notif-prefs-v1';
+            function getNotifPrefs() {
+                try { return JSON.parse(localStorage.getItem(PREFS_KEY) || '{}'); } catch (_) { return {}; }
+            }
+            function filterByPrefs(items) {
+                var p = getNotifPrefs();
+                return items.filter(function (n) {
+                    if (n.module === 'Inventory'      && p.inventory    === false) return false;
+                    if (n.module === 'Forecasting'    && p.forecasting  === false) return false;
+                    if (n.module === 'Smart Insights' && p.smartInsights === false) return false;
+                    if (n.module === 'Sustainability' && p.sustainability === false) return false;
+                    if (n.id && n.id.startsWith('system-') && p.system === false) return false;
+                    return true;
+                });
+            }
+
+            // ── Render panel ──────────────────────────────────────────────
+            function renderPanel() {
+                var readIds  = getReadIds();
+                var visible  = filterByPrefs(cache || []);
+
+                if (!visible || visible.length === 0) {
+                    list.innerHTML = '<div class="notif-empty"><i class="fa-regular fa-bell"></i><p>All clear — no active alerts.</p></div>';
+                    return;
+                }
+
+                list.innerHTML = visible.map(function (n) {
+                    var isUnread = !readIds.has(n.id);
+                    var color    = sevColor(n.severity);
+                    var icon     = modIcon(n.module);
+                    return '<a class="notif-item' + (isUnread ? ' notif-unread' : '') + '" '
+                         + 'href="' + esc(n.moduleUrl) + '" data-nid="' + esc(n.id) + '">'
+                         + '<div class="notif-sev-bar" style="background:' + color + '"></div>'
+                         + '<div class="notif-body">'
+                         +   '<div class="notif-row-top">'
+                         +     '<span class="notif-title">' + esc(n.title) + '</span>'
+                         +     '<span class="notif-sev-badge" style="background:' + color + '20;color:' + color + '">' + esc(n.severity) + '</span>'
+                         +   '</div>'
+                         +   '<div class="notif-message">' + esc(n.message) + '</div>'
+                         +   '<div class="notif-row-bottom">'
+                         +     '<span class="notif-module-tag"><i class="fa-solid ' + icon + '"></i> ' + esc(n.module) + '</span>'
+                         +     '<span class="notif-time">' + esc(n.timeLabel) + '</span>'
+                         +   '</div>'
+                         + '</div>'
+                         + '</a>';
+                }).join('');
+
+                list.querySelectorAll('.notif-item').forEach(function (el) {
+                    el.addEventListener('click', function (e) {
+                        e.preventDefault();
+                        markRead(this.dataset.nid);
+                        updateBadge();
+                        window.location.href = this.getAttribute('href');
+                    });
+                });
+            }
+
+            // ── Fetch from API (sessionStorage cache) ─────────────────────
+            async function loadNotifications() {
+                // Only restore from cache if it contains real data — never cache an empty array
+                // (an empty array means the previous fetch either failed or hit a wrong URL).
+                var stored = null;
+                try { stored = sessionStorage.getItem(CACHE_KEY); } catch (_) {}
+
+                if (stored) {
+                    try {
+                        var parsed = JSON.parse(stored);
+                        if (Array.isArray(parsed) && parsed.length > 0) {
+                            cache = parsed;
+                            updateBadge();
+                            return;
+                        }
+                    } catch (_) {}
+                }
+
+                try {
+                    var res = await fetch('/Notification/GetAll');
+                    if (!res.ok) {
+                        cache = [];
+                        updateBadge();
+                        return;
+                    }
+                    var data = await res.json();
+                    cache = Array.isArray(data) ? data : [];
+                    // Only persist a non-empty result so a transient failure doesn't freeze the panel
+                    if (cache.length > 0) {
+                        try { sessionStorage.setItem(CACHE_KEY, JSON.stringify(cache)); } catch (_) {}
+                    }
+                } catch (_) {
+                    cache = [];
+                }
+                updateBadge();
+            }
+
+            // ── Bell toggle ───────────────────────────────────────────────
+            bellBtn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                var isOpen = panel.classList.toggle('show');
+                bellBtn.setAttribute('aria-expanded', isOpen);
+                if (isOpen) {
+                    if (cache !== null) {
+                        renderPanel();
+                    } else {
+                        list.innerHTML = '<div class="notif-loading">Loading…</div>';
+                        loadNotifications().then(function () { renderPanel(); });
+                    }
+                }
+            });
+
+            markAllBtn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                markAllRead();
+            });
+
+            // Close on outside click
+            document.addEventListener('click', function (e) {
+                if (!bellBtn.closest('.notif-wrapper').contains(e.target)) {
+                    panel.classList.remove('show');
+                    bellBtn.setAttribute('aria-expanded', 'false');
+                }
+            });
+
+            // Escape closes panel
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape' && panel.classList.contains('show')) {
+                    panel.classList.remove('show');
+                    bellBtn.setAttribute('aria-expanded', 'false');
+                }
+            });
+
+            function esc(s) {
+                if (s == null) return '';
+                return String(s)
+                    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            }
+
+            // Kick off background load — badge appears without opening panel
+            loadNotifications();
         })();
     </script>
 

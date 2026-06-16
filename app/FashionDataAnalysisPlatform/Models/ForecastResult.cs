@@ -1,0 +1,36 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+
+namespace FashionDataAnalysisPlatform.Models
+{
+    [Table("ForecastResults")]
+    public class ForecastResult
+    {
+        [Key]
+        public int ForecastResultId { get; set; }
+
+        public int? StoreId { get; set; }
+
+        [Required]
+        [StringLength(100)]
+        public string StoreName { get; set; } = string.Empty;
+
+        [Required]
+        [StringLength(100)]
+        public string Category { get; set; } = string.Empty;
+
+        public DateTime ForecastMonth { get; set; }
+
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal RevenueForecast { get; set; }
+
+        public int OrdersForecast { get; set; }
+
+        public int UnitsForecast { get; set; }
+
+        public DateTime GeneratedAt { get; set; }
+
+        [StringLength(50)]
+        public string? ModelName { get; set; }
+    }
+}

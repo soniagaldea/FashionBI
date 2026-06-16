@@ -27,6 +27,29 @@
     };
 
     string marginClass = profitMargin >= 25 ? "emerald" : profitMargin >= 10 ? "amber" : "red";
+
+    decimal priorRevenue = (decimal)(ViewBag.PriorRevenue ?? 0m);
+    int     priorOrders  = (int)    (ViewBag.PriorOrders  ?? 0);
+    int     priorUnits   = (int)    (ViewBag.PriorUnits   ?? 0);
+    decimal priorProfit  = (decimal)(ViewBag.PriorProfit  ?? 0m);
+    decimal priorAov     = (decimal)(ViewBag.PriorAov     ?? 0m);
+    decimal priorMargin  = (decimal)(ViewBag.PriorMargin  ?? 0m);
+
+    Func<decimal, decimal, bool, string> Trend = (curr, prev, inv) => {
+        if (prev <= 0) return "";
+        var d = (curr - prev) / prev * 100;
+        if (Math.Abs(d) < 0.05m) return "<span class=\"kpi-trend flat\">&#8212;</span>";
+        bool pos = d > 0; bool good = inv ? !pos : pos;
+        string cls = good ? "up" : "down";
+        return $"<span class=\"kpi-trend {cls}\">{(pos ? "&#9650;" : "&#9660;")} {(pos ? "+" : "")}{d:F1}%</span>";
+    };
+
+    string tRevenue = Trend(totalRevenue, priorRevenue, false);
+    string tOrders  = Trend((decimal)totalOrders, (decimal)priorOrders, false);
+    string tUnits   = Trend((decimal)totalUnits,  (decimal)priorUnits,  false);
+    string tAov     = Trend(aov, priorAov, false);
+    string tProfit  = Trend(grossProfit, priorProfit, false);
+    string tMargin  = Trend(profitMargin, priorMargin, false);
 }
 
 <!-- ══════════════════════════════════════════════════════════════════
@@ -56,9 +79,9 @@
             </ul>
         </div>
 
-        <a href="#" class="export-btn">
+        <button type="button" class="export-btn" onclick="exportToPdf('Sales Analytics')">
             <i class="fa-solid fa-arrow-up-from-bracket"></i> Export
-        </a>
+        </button>
 
     </div>
 </div>
@@ -75,7 +98,14 @@
                 <div class="kpi-icon indigo"><i class="fa-solid fa-wallet"></i></div>
             </div>
             <div class="kpi-value">€@totalRevenue.ToString("N0")</div>
-            <div class="kpi-footer"><span class="kpi-pill emerald"><i class="fa-solid fa-circle-check"></i> @dateRangeLabel</span></div>
+            <div class="kpi-footer">
+                @if (!string.IsNullOrEmpty(tRevenue)) {
+                    @Html.Raw(tRevenue)
+                    <span class="kpi-trend-lbl">vs prior period</span>
+                } else {
+                    <span class="kpi-pill emerald"><i class="fa-solid fa-circle-check"></i> @dateRangeLabel</span>
+                }
+            </div>
         </div>
     </div>
 
@@ -86,7 +116,14 @@
                 <div class="kpi-icon indigo"><i class="fa-solid fa-bag-shopping"></i></div>
             </div>
             <div class="kpi-value">@totalOrders.ToString("N0")</div>
-            <div class="kpi-footer"><span class="kpi-pill indigo"><i class="fa-solid fa-rotate"></i> Distinct orders</span></div>
+            <div class="kpi-footer">
+                @if (!string.IsNullOrEmpty(tOrders)) {
+                    @Html.Raw(tOrders)
+                    <span class="kpi-trend-lbl">vs prior period</span>
+                } else {
+                    <span class="kpi-pill indigo"><i class="fa-solid fa-rotate"></i> Distinct orders</span>
+                }
+            </div>
         </div>
     </div>
 
@@ -97,7 +134,14 @@
                 <div class="kpi-icon slate"><i class="fa-solid fa-cube"></i></div>
             </div>
             <div class="kpi-value">@totalUnits.ToString("N0")</div>
-            <div class="kpi-footer"><span class="kpi-pill slate">Total quantity</span></div>
+            <div class="kpi-footer">
+                @if (!string.IsNullOrEmpty(tUnits)) {
+                    @Html.Raw(tUnits)
+                    <span class="kpi-trend-lbl">vs prior period</span>
+                } else {
+                    <span class="kpi-pill slate">Total quantity</span>
+                }
+            </div>
         </div>
     </div>
 
@@ -108,7 +152,14 @@
                 <div class="kpi-icon amber"><i class="fa-solid fa-receipt"></i></div>
             </div>
             <div class="kpi-value">€@aov.ToString("N2")</div>
-            <div class="kpi-footer"><span class="kpi-pill amber">AOV</span></div>
+            <div class="kpi-footer">
+                @if (!string.IsNullOrEmpty(tAov)) {
+                    @Html.Raw(tAov)
+                    <span class="kpi-trend-lbl">vs prior period</span>
+                } else {
+                    <span class="kpi-pill amber">AOV</span>
+                }
+            </div>
         </div>
     </div>
 
@@ -119,7 +170,14 @@
                 <div class="kpi-icon emerald"><i class="fa-solid fa-arrow-trend-up"></i></div>
             </div>
             <div class="kpi-value">€@grossProfit.ToString("N0")</div>
-            <div class="kpi-footer"><span class="kpi-pill emerald">Profitability</span></div>
+            <div class="kpi-footer">
+                @if (!string.IsNullOrEmpty(tProfit)) {
+                    @Html.Raw(tProfit)
+                    <span class="kpi-trend-lbl">vs prior period</span>
+                } else {
+                    <span class="kpi-pill emerald">Profitability</span>
+                }
+            </div>
         </div>
     </div>
 
@@ -131,6 +189,7 @@
             </div>
             <div class="kpi-value">@profitMargin.ToString("N1")%</div>
             <div class="kpi-footer">
+                @Html.Raw(tMargin)
                 <span class="kpi-pill @marginClass">
                     @(profitMargin >= 25 ? "Strong margin" : profitMargin >= 10 ? "Healthy" : "Watch margin")
                 </span>
@@ -311,7 +370,7 @@
                     <div class="chart-card-title">Smart Insights</div>
                     <div class="chart-card-subtitle">Business intelligence from real sales data</div>
                 </div>
-                <span class="kpi-pill emerald" style="font-size:11px;" id="saInsightCount"></span>
+                <span class="kpi-pill emerald" style="font-size:11px;" id="saInsightCount">0</span>
             </div>
             <div class="card-body" id="saInsightsBody" style="overflow-y:auto; max-height:360px;">
                 <!-- Rendered by JS -->

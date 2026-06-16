@@ -43,9 +43,9 @@
             </ul>
         </div>
 
-        <a href="#" class="export-btn">
+        <button type="button" class="export-btn" onclick="exportToPdf('Store Comparison')">
             <i class="fa-solid fa-arrow-up-from-bracket"></i> Export
-        </a>
+        </button>
 
     </div>
 </div>
@@ -174,7 +174,7 @@ else
                     <div class="chart-card-title">Store Ranking</div>
                     <div class="chart-card-subtitle">Sorted by revenue — all selected stores</div>
                 </div>
-                <span class="sc-badge" id="rankingBadge">— stores</span>
+                <span class="sc-badge" id="rankingBadge">0 stores</span>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
@@ -211,7 +211,7 @@ else
                     <div class="chart-card-title">Smart Store Insights</div>
                     <div class="chart-card-subtitle">Rule-based analysis from real store data</div>
                 </div>
-                <span class="sc-badge" id="insightsBadge">— insights</span>
+                <span class="sc-badge" id="insightsBadge">0 insights</span>
             </div>
             <div class="card-body">
                 <div class="sc-insights-grid" id="insightsGrid"></div>
@@ -295,6 +295,19 @@ function renderPills() {
     notice.style.display = selectedIds.size < 2 ? 'flex' : 'none';
 }
 
+// ── Trend indicator helper ────────────────────────────────────────────
+function trendHtml(curr, prev, inverse = false) {
+    if (prev == null || prev <= 0) return '';
+    const delta = (curr - prev) / prev * 100;
+    if (Math.abs(delta) < 0.05) return '<span class="kpi-trend flat">&#8212;</span>';
+    const pos   = delta > 0;
+    const good  = inverse ? !pos : pos;
+    const cls   = good ? 'up' : 'down';
+    const arrow = pos ? '&#9650;' : '&#9660;';
+    const sign  = pos ? '+' : '';
+    return `<span class="kpi-trend ${cls}">${arrow} ${sign}${delta.toFixed(1)}%</span>`;
+}
+
 // ── Store summary cards ───────────────────────────────────────────────
 function renderCards() {
     const grid = document.getElementById('storeCardsGrid');
@@ -314,7 +327,9 @@ function renderCards() {
         const oosTag = s.oos > 0       ? `<span class="sc-risk-tag danger">${s.oos} OOS</span>`      : '';
         const health = !lowTag && !oosTag ? '<span class="sc-risk-tag ok"><i class="fa-solid fa-circle-check" style="font-size:10px;"></i> Healthy</span>' : lowTag + oosTag;
 
-        const meta = [s.city, s.storeType].filter(Boolean).join(' · ') || 'Store';
+        const meta        = [s.city, s.storeType].filter(Boolean).join(' · ') || 'Store';
+        const revTrend    = trendHtml(s.revenue, s.prevRevenue);
+        const marginTrend = trendHtml(s.margin, s.prevMargin);
 
         const card = document.createElement('div');
         card.className = 'sc-store-card';
@@ -331,6 +346,7 @@ function renderCards() {
             <div class="sc-card-revenue-block">
                 <div class="sc-card-rev-label">Revenue</div>
                 <div class="sc-card-rev-value">${fmt(s.revenue)}</div>
+                ${revTrend ? `<div style="margin-top:2px;line-height:1;">${revTrend}</div>` : ''}
                 <div class="sc-card-rev-bar"><div class="sc-card-rev-fill" style="width:${barPct}%"></div></div>
             </div>
             <div class="sc-card-kpis">
@@ -344,6 +360,7 @@ function renderCards() {
                 </div>
                 <div class="sc-kpi">
                     <div class="sc-kpi-val sc-kpi-val--${marginCls(s.margin)}">${pct(s.margin)}</div>
+                    ${marginTrend ? `<div style="text-align:center;line-height:1;margin-top:1px;">${marginTrend}</div>` : ''}
                     <div class="sc-kpi-lbl">Margin</div>
                 </div>
                 <div class="sc-kpi">

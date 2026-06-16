@@ -1,0 +1,20 @@
+<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none"
+     xmlns="http://www.w3.org/2000/svg" style="display:block;width:1em;height:1em">
+    <!--
+      Price tag outline — open path that leaves a gap at x=10..14 (y=4.5) for the hole.
+      Using an open path instead of a mask avoids SVG ID collisions when this partial
+      is rendered multiple times on the same page (sidebar + profile tile).
+    -->
+    <path d="M14 4.5 L19 4.5 A2.5 2.5 0 0 1 21.5 7 L21.5 18
+             A2.5 2.5 0 0 1 19 20.5 L5 20.5
+             A2.5 2.5 0 0 1 2.5 18 L2.5 7
+             A2.5 2.5 0 0 1 5 4.5 L10 4.5"
+          stroke="currentColor" stroke-width="1.4"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Hole ring: full circle centred on the top edge -->
+    <circle cx="12" cy="4.5" r="2" stroke="currentColor" stroke-width="1.4"/>
+    <!-- 3 ascending analytics bars: 1:2:3 height ratio, bottom-anchored at y=19, centred at x=12 -->
+    <rect x="6"    y="16" width="3" height="3" fill="currentColor" rx="0.5"/>
+    <rect x="10.5" y="13" width="3" height="6" fill="currentColor" rx="0.5"/>
+    <rect x="15"   y="10" width="3" height="9" fill="currentColor" rx="0.5"/>
+</svg>

@@ -1,0 +1,193 @@
+@model List<FashionDataAnalysisPlatform.Models.StoreConnection>
+@{
+    ViewData["Title"] = "Store Connections";
+}
+
+<div class="dash-header" style="margin-bottom:24px;">
+    <div>
+        <h1 class="dash-title">Store Connections</h1>
+        <p class="dash-subtitle">Manage and monitor your connected store APIs</p>
+    </div>
+</div>
+
+@if (!Model.Any())
+{
+    <div class="card">
+        <div class="conn-empty">
+            <i class="fa-solid fa-plug-circle-xmark"></i>
+            <p>No store connections are configured yet.</p>
+        </div>
+    </div>
+}
+else
+{
+    <div class="conn-grid">
+        @foreach (var conn in Model)
+        {
+            <div class="conn-card" id="conn-card-@conn.StoreConnectionId">
+
+                <div class="conn-card-top">
+                    <div class="conn-card-icon">
+                        <i class="fa-solid fa-store"></i>
+                    </div>
+                    <div class="conn-card-title">@conn.StoreName</div>
+                    <span class="conn-status-badge @(conn.IsActive ? "connected" : "disabled")"
+                          id="status-@conn.StoreConnectionId">
+                        @(conn.IsActive ? "Connected" : "Disabled")
+                    </span>
+                </div>
+
+                <div class="conn-url">@conn.StoreApiUrl</div>
+
+                <div class="conn-meta">
+                    <i class="fa-regular fa-clock"></i>
+                    Last sync:&nbsp;
+                    <span id="last-sync-@conn.StoreConnectionId">
+                        @(conn.LastSyncAt.HasValue
+                            ? conn.LastSyncAt.Value.ToString("dd MMM yyyy, HH:mm")
+                            : "Never")
+                    </span>
+                </div>
+
+                <div class="conn-actions">
+                    <button class="conn-btn conn-btn-test"
+                            onclick="testConn(@conn.StoreConnectionId)">
+                        <i class="fa-solid fa-satellite-dish"></i> Test
+                    </button>
+                    <button class="conn-btn conn-btn-sync"
+                            id="sync-btn-@conn.StoreConnectionId"
+                            onclick="syncConn(@conn.StoreConnectionId)"
+                            @(conn.IsActive ? "" : "disabled")>
+                        <i class="fa-solid fa-rotate"></i> Sync Now
+                    </button>
+                    <button class="conn-btn conn-btn-toggle @(conn.IsActive ? "is-active" : "is-inactive")"
+                            id="toggle-btn-@conn.StoreConnectionId"
+                            onclick="toggleConn(@conn.StoreConnectionId)">
+                        @if (conn.IsActive)
+                        {
+                            <i class="fa-solid fa-toggle-on"></i>
+                            <span>Disable</span>
+                        }
+                        else
+                        {
+                            <i class="fa-solid fa-toggle-off"></i>
+                            <span>Enable</span>
+                        }
+                    </button>
+                </div>
+
+            </div>
+        }
+    </div>
+}
+
+<!-- Toast -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index:9999;">
+    <div id="connToast" class="toast align-items-center border-0 text-white"
+         role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="d-flex">
+            <div class="toast-body fw-medium" id="connToastBody" style="font-size:13px;"></div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto"
+                    data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    var _toast     = new bootstrap.Toast(document.getElementById('connToast'), { delay: 4000 });
+    var _toastBody = document.getElementById('connToastBody');
+    var _toastEl   = document.getElementById('connToast');
+
+    function showToast(msg, ok) {
+        _toastEl.classList.remove('bg-success', 'bg-danger', 'bg-warning');
+        if (ok === true)       _toastEl.classList.add('bg-success');
+        else if (ok === false) _toastEl.classList.add('bg-danger');
+        else                   _toastEl.classList.add('bg-warning');
+        _toastBody.textContent = msg;
+        _toast.show();
+    }
+
+    async function post(url) {
+        var r = await fetch(url, { method: 'POST' });
+        return await r.json();
+    }
+
+    async function testConn(id) {
+        var btn      = document.querySelector('#conn-card-' + id + ' .conn-btn-test');
+        var statusEl = document.getElementById('status-' + id);
+
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Testing…';
+        statusEl.className   = 'conn-status-badge testing';
+        statusEl.textContent = 'Testing…';
+
+        try {
+            var d = await post('/StoreConnection/TestConnection?id=' + id);
+            if (d.ok) {
+                statusEl.className   = 'conn-status-badge connected';
+                statusEl.textContent = 'Connected';
+            } else {
+                statusEl.className   = 'conn-status-badge unavailable';
+                statusEl.textContent = 'Unavailable';
+            }
+            showToast(d.message, d.ok);
+        } catch (_) {
+            statusEl.className   = 'conn-status-badge unavailable';
+            statusEl.textContent = 'Unavailable';
+            showToast('API unavailable. Sync skipped.', false);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-satellite-dish"></i> Test';
+        }
+    }
+
+    async function syncConn(id) {
+        var btn = document.getElementById('sync-btn-' + id);
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Syncing…';
+
+        try {
+            var d = await post('/StoreConnection/SyncNow?id=' + id);
+            if (d.ok && d.lastSync) {
+                document.getElementById('last-sync-' + id).textContent = d.lastSync;
+            }
+            showToast(d.message, d.ok);
+        } catch (_) {
+            showToast('API unavailable. Sync skipped.', false);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-rotate"></i> Sync Now';
+        }
+    }
+
+    async function toggleConn(id) {
+        try {
+            var d = await post('/StoreConnection/Toggle?id=' + id);
+            if (!d.ok) { showToast(d.message || 'Error.', false); return; }
+
+            var statusEl  = document.getElementById('status-'     + id);
+            var toggleBtn = document.getElementById('toggle-btn-' + id);
+            var syncBtn   = document.getElementById('sync-btn-'   + id);
+
+            if (d.isActive) {
+                statusEl.className   = 'conn-status-badge connected';
+                statusEl.textContent = 'Connected';
+                toggleBtn.className  = 'conn-btn conn-btn-toggle is-active';
+                toggleBtn.innerHTML  = '<i class="fa-solid fa-toggle-on"></i> <span>Disable</span>';
+                if (syncBtn) syncBtn.disabled = false;
+                showToast('Connection enabled.', true);
+            } else {
+                statusEl.className   = 'conn-status-badge disabled';
+                statusEl.textContent = 'Disabled';
+                toggleBtn.className  = 'conn-btn conn-btn-toggle is-inactive';
+                toggleBtn.innerHTML  = '<i class="fa-solid fa-toggle-off"></i> <span>Enable</span>';
+                if (syncBtn) syncBtn.disabled = true;
+                showToast('Connection disabled.', null);
+            }
+        } catch (_) {
+            showToast('Failed to update connection.', false);
+        }
+    }
+</script>
+}

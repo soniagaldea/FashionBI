@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
@@ -11,6 +12,7 @@ using FashionDataAnalysisPlatform.Models;
 
 namespace FashionDataAnalysisPlatform.Controllers
 {
+    [Authorize]
     public class InventoriesController : Controller
     {
         private readonly AppDbContext _context;
@@ -305,6 +307,30 @@ namespace FashionDataAnalysisPlatform.Controllers
             ViewBag.StockToSalesRatio = Math.Round(stockToSalesRatio, 2);
             ViewBag.InvTurnover       = Math.Round(invTurnover,       2);
             ViewBag.OverstockCount    = overstockCount;
+
+            // ── Prior-period velocity (trend indicators) ─────────────────────
+            double priorSellThrough = 0, priorInvTurnover = 0;
+
+            if (salesStart.HasValue)
+            {
+                var priorSalesStart = salesStart.Value.AddDays(-refDays);
+                var priorSalesEnd   = salesStart.Value;
+
+                var priorSQ = _context.Sales.AsNoTracking()
+                    .Where(s => s.SaleDate >= priorSalesStart && s.SaleDate < priorSalesEnd);
+                if (storeIds != null && storeIds.Count > 0)
+                    priorSQ = priorSQ.Where(s => s.StoreId != null && storeIds.Contains(s.StoreId.Value));
+
+                var priorSold = await priorSQ.SumAsync(s => (int?)s.Quantity) ?? 0;
+
+                priorSellThrough  = (unitsOnHand + priorSold) > 0
+                    ? (double)priorSold / (unitsOnHand + priorSold) * 100.0 : 0;
+                priorInvTurnover  = unitsOnHand > 0
+                    ? (double)priorSold / (refDays / 365.0) / unitsOnHand : 0;
+            }
+
+            ViewBag.PriorSellThrough = Math.Round(priorSellThrough, 1);
+            ViewBag.PriorInvTurnover = Math.Round(priorInvTurnover, 2);
 
             ViewBag.LowStockAlerts = JsonSerializer.Serialize(lowStockAlerts, opts);
             ViewBag.DeadStockItems = JsonSerializer.Serialize(deadStockItems, opts);

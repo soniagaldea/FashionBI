@@ -49,6 +49,21 @@
         ? alertArr.EnumerateArray().ToList() : new List<JsonElement>();
     var deadList  = deadArr.ValueKind  == JsonValueKind.Array
         ? deadArr.EnumerateArray().ToList()  : new List<JsonElement>();
+
+    var priorSellThrough = (double)(ViewBag.PriorSellThrough ?? 0.0);
+    var priorInvTurnover = (double)(ViewBag.PriorInvTurnover ?? 0.0);
+
+    Func<double, double, bool, string> TrendD = (curr, prev, inv) => {
+        if (prev <= 0) return "";
+        var d = (curr - prev) / prev * 100.0;
+        if (Math.Abs(d) < 0.05) return "<span class=\"kpi-trend flat\">&#8212;</span>";
+        bool pos = d > 0; bool good = inv ? !pos : pos;
+        string cls = good ? "up" : "down";
+        return $"<span class=\"kpi-trend {cls}\">{(pos ? "&#9650;" : "&#9660;")} {(pos ? "+" : "")}{d:F1}%</span>";
+    };
+
+    string tSellThrough = (dateRange != "all") ? TrendD(sellThrough,  priorSellThrough,  false) : "";
+    string tInvTurnover = (dateRange != "all") ? TrendD(invTurnover,  priorInvTurnover,  false) : "";
 }
 
 <!-- ══════════════════════════════════════════════════════════════════
@@ -78,9 +93,9 @@
             </ul>
         </div>
 
-        <a href="#" class="export-btn">
+        <button type="button" class="export-btn" onclick="exportToPdf('Inventory Intelligence')">
             <i class="fa-solid fa-arrow-up-from-bracket"></i> Export
-        </a>
+        </button>
 
     </div>
 </div>
@@ -239,7 +254,7 @@ else
                             <span class="stock-health-hint">Sold ÷ (Sold + On-hand)</span>
                         </div>
                         <div class="stock-health-value @(sellThrough < 20 ? "val--danger" : sellThrough > 60 ? "val--success" : "")">
-                            @sellThrough.ToString("F1")%
+                            @sellThrough.ToString("F1")% @Html.Raw(tSellThrough)
                         </div>
                     </li>
 
@@ -259,7 +274,7 @@ else
                             <span class="stock-health-hint">Annualised turns</span>
                         </div>
                         <div class="stock-health-value @(invTurnover < 2 ? "val--warning" : invTurnover > 6 ? "val--success" : "")">
-                            @invTurnover.ToString("F1")×
+                            @invTurnover.ToString("F1")× @Html.Raw(tInvTurnover)
                         </div>
                     </li>
 
@@ -373,7 +388,7 @@ else
             }
             else
             {
-                <div class="card-body p-0">
+                <div class="card-body p-0" style="max-height:320px;overflow-y:auto;">
                     <table class="top-products-table">
                         <thead>
                             <tr>
@@ -456,7 +471,7 @@ else
             }
             else
             {
-                <div class="card-body p-0">
+                <div class="card-body p-0" style="max-height:320px;overflow-y:auto;">
                     <table class="top-products-table">
                         <thead>
                             <tr>

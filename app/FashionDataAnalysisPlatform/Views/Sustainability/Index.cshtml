@@ -1,0 +1,1026 @@
+@model FashionDataAnalysisPlatform.ViewModels.SustainabilityViewModel
+@using System.Text.Json
+@{
+    ViewData["Title"] = "Sustainability Intelligence";
+
+    // ── Helpers ──────────────────────────────────────────────────────────
+    string StatusBg(string c)     => c == "emerald" ? "#d1fae5" : c == "amber" ? "#fef3c7" : c == "red" ? "#fee2e2" : "#f1f5f9";
+    string StatusFg(string c)     => c == "emerald" ? "#065f46" : c == "amber" ? "#92400e" : c == "red" ? "#991b1b" : "#475569";
+    string StatusBorder(string c) => c == "emerald" ? "#6ee7b7" : c == "amber" ? "#fcd34d" : c == "red" ? "#fca5a5" : "#cbd5e1";
+    string DaysLabel(int d) => d == 9999 ? "Core — No Deadline"
+                             : d < 0    ? $"Expired {Math.Abs(d)} days ago"
+                             :            $"{d} days";
+
+    // ── Chart data ────────────────────────────────────────────────────────
+    var bubbleDatasets = Model.WasteRiskPoints
+        .GroupBy(p => p.RiskColor)
+        .Select(g => new {
+            label = g.Key == "red"   ? "Critical Risk" :
+                    g.Key == "amber" ? "Monitor"       : "Healthy",
+            backgroundColor = g.Key == "red"   ? "rgba(220,38,38,0.55)"  :
+                              g.Key == "amber" ? "rgba(245,158,11,0.55)" :
+                                                 "rgba(16,185,129,0.55)",
+            borderColor = g.Key == "red"   ? "rgba(220,38,38,0.9)"  :
+                          g.Key == "amber" ? "rgba(245,158,11,0.9)" :
+                                             "rgba(16,185,129,0.9)",
+            borderWidth = 1.5,
+            data = g.Select(p => new {
+                x      = p.DaysToEnd == 9999 ? 400 : Math.Max(-60, p.DaysToEnd),
+                y      = p.SellThroughRate,
+                r      = (double)Math.Max(7, Math.Min(36, p.AtRiskValue / 250m)),
+                label  = p.Label,
+                cat    = p.Category,
+                season = p.SeasonName,
+                str    = p.SellThroughRate,
+                days   = p.DaysToEnd,
+                score  = p.WasteRiskScore,
+                value  = p.AtRiskValue
+            }).ToList()
+        }).ToList();
+
+    string bubbleJson = JsonSerializer.Serialize(bubbleDatasets);
+
+}
+
+<!-- ══════════════════════════════════════════════════════════════════
+     PAGE HEADER
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="dash-header">
+    <div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <h1 class="dash-title">Sustainability Intelligence</h1>
+            <span class="badge rounded-pill"
+                  style="background:#d1fae5;color:#065f46;font-size:11px;font-weight:600;padding:4px 10px;">
+                <i class="fa-solid fa-leaf me-1"></i>Waste Risk Analysis
+            </span>
+        </div>
+        <p class="dash-subtitle">Inventory Waste Risk &amp; Collection Efficiency Analysis</p>
+    </div>
+
+    <div class="dash-actions">
+        <span style="font-size:12px;color:var(--muted);white-space:nowrap;">
+            <i class="fa-regular fa-clock me-1"></i>Last refreshed: @Model.LastRefreshedAt.ToString("dd MMM yyyy, HH:mm")
+        </span>
+        <button class="export-btn" onclick="exportToPdf('Sustainability Intelligence')" title="Export this report as PDF">
+            <i class="fa-solid fa-arrow-up-from-bracket"></i> Export
+        </button>
+        <button type="button" class="date-range-btn"
+                data-bs-toggle="modal" data-bs-target="#methodologyModal">
+            <i class="fa-solid fa-circle-info"></i> Methodology
+        </button>
+    </div>
+</div>
+
+@if (!Model.HasData)
+{
+    <div class="d-flex justify-content-center align-items-center" style="min-height:50vh;">
+        <div class="card text-center" style="max-width:480px;width:100%;border-radius:20px;padding:48px 40px;">
+            <div style="width:72px;height:72px;background:#d1fae5;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 24px;">
+                <i class="fa-solid fa-leaf" style="font-size:28px;color:#059669;"></i>
+            </div>
+            <h2 style="font-size:20px;font-weight:700;color:var(--text);margin-bottom:8px;">No Data Available</h2>
+            <p style="font-size:14px;color:var(--muted);line-height:1.6;">
+                Sustainability Intelligence requires sales and inventory data to be present. Please
+                verify that the store connection is active and that at least one data sync has
+                completed successfully.
+            </p>
+        </div>
+    </div>
+    return;
+}
+
+<!-- ══════════════════════════════════════════════════════════════════
+     SECTION 1 — TOP KPI ROW
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="row g-3 mb-4">
+
+    <!-- KPI 1: Avg Sell-Through Rate -->
+    <div class="col-sm-6 col-xl">
+        <div class="card h-100" style="border-radius:14px;padding:20px;border:1px solid var(--border);">
+            <div class="d-flex align-items-start justify-content-between mb-3">
+                <div style="width:40px;height:40px;border-radius:10px;background:#d1fae5;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                    <i class="fa-solid fa-arrow-trend-up" style="color:#059669;font-size:16px;"></i>
+                </div>
+                <span class="badge" style="background:#d1fae5;color:#065f46;font-size:10px;font-weight:600;border-radius:20px;padding:3px 8px;">
+                    Network-wide
+                </span>
+            </div>
+            <div style="font-size:28px;font-weight:700;color:var(--text);line-height:1;">
+                @Model.AvgSellThroughRate.ToString("N1")%
+            </div>
+            <div style="font-size:12px;color:var(--muted);margin-top:4px;">Avg Sell-Through Rate</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
+                Target benchmark: ≥80% per season
+            </div>
+        </div>
+    </div>
+
+    <!-- KPI 2: At-Risk Inventory Value -->
+    <div class="col-sm-6 col-xl">
+        <div class="card h-100" style="border-radius:14px;padding:20px;border:1px solid var(--border);">
+            <div class="d-flex align-items-start justify-content-between mb-3">
+                <div style="width:40px;height:40px;border-radius:10px;background:#fee2e2;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                    <i class="fa-solid fa-triangle-exclamation" style="color:#dc2626;font-size:16px;"></i>
+                </div>
+                <span class="badge" style="background:#fee2e2;color:#991b1b;font-size:10px;font-weight:600;border-radius:20px;padding:3px 8px;">
+                    Seasonal
+                </span>
+            </div>
+            <div style="font-size:28px;font-weight:700;color:#dc2626;line-height:1;">
+                €@Model.AtRiskInventoryValue.ToString("N0")
+            </div>
+            <div style="font-size:12px;color:var(--muted);margin-top:4px;">At-Risk Inventory Value</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
+                Seasonal items: STR &lt;70% &amp; ≤180 days to close
+            </div>
+        </div>
+    </div>
+
+    <!-- KPI 3: Dead Stock Count -->
+    <div class="col-sm-6 col-xl">
+        <div class="card h-100" style="border-radius:14px;padding:20px;border:1px solid var(--border);">
+            <div class="d-flex align-items-start justify-content-between mb-3">
+                <div style="width:40px;height:40px;border-radius:10px;background:#fef3c7;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                    <i class="fa-solid fa-box-archive" style="color:#d97706;font-size:16px;"></i>
+                </div>
+                <span class="badge" style="background:#fef3c7;color:#92400e;font-size:10px;font-weight:600;border-radius:20px;padding:3px 8px;">
+                    0 velocity
+                </span>
+            </div>
+            <div style="font-size:28px;font-weight:700;color:@(Model.DeadStockCount > 0 ? "#d97706" : "var(--text)");line-height:1;">
+                @Model.DeadStockCount
+            </div>
+            <div style="font-size:12px;color:var(--muted);margin-top:4px;">Dead Stock SKUs</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
+                Zero sales in last 45 days, stock &gt; 0
+            </div>
+        </div>
+    </div>
+
+    <!-- KPI 4: Markdown Dependency Rate -->
+    <div class="col-sm-6 col-xl">
+        <div class="card h-100" style="border-radius:14px;padding:20px;border:1px solid var(--border);">
+            @{
+                string mdKpiColor = Model.MarkdownDependencyRate >= 50m ? "#dc2626"
+                                  : Model.MarkdownDependencyRate >= 30m ? "#d97706" : "#059669";
+                string mdKpiBg    = Model.MarkdownDependencyRate >= 50m ? "#fee2e2"
+                                  : Model.MarkdownDependencyRate >= 30m ? "#fef3c7" : "#d1fae5";
+                string mdKpiFg    = Model.MarkdownDependencyRate >= 50m ? "#991b1b"
+                                  : Model.MarkdownDependencyRate >= 30m ? "#92400e" : "#065f46";
+            }
+            <div class="d-flex align-items-start justify-content-between mb-3">
+                <div style="width:40px;height:40px;border-radius:10px;background:@mdKpiBg;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                    <i class="fa-solid fa-tag" style="color:@mdKpiColor;font-size:16px;"></i>
+                </div>
+                <span class="badge" style="background:@mdKpiBg;color:@mdKpiFg;font-size:10px;font-weight:600;border-radius:20px;padding:3px 8px;">
+                    @(Model.MarkdownDependencyRate >= 50m ? "Overproduction Signal" : Model.MarkdownDependencyRate >= 30m ? "Elevated" : "Healthy")
+                </span>
+            </div>
+            <div style="font-size:28px;font-weight:700;color:@mdKpiColor;line-height:1;">
+                @Model.MarkdownDependencyRate.ToString("N1")%
+            </div>
+            <div style="font-size:12px;color:var(--muted);margin-top:4px;">Markdown Dependency Rate</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
+                % of units sold at ≥20% discount
+            </div>
+        </div>
+    </div>
+
+    <!-- KPI 5: Seasonal Overstock Value -->
+    <div class="col-sm-6 col-xl">
+        @if (Model.SeasonalOverstockValue == 0)
+        {
+            <div class="card h-100" style="border-radius:14px;padding:20px;border:1px solid #6ee7b7;background:linear-gradient(135deg,#f0fdf4,#ecfdf5);">
+                <div class="d-flex align-items-start justify-content-between mb-3">
+                    <div style="width:40px;height:40px;border-radius:10px;background:#d1fae5;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                        <i class="fa-solid fa-circle-check" style="color:#059669;font-size:16px;"></i>
+                    </div>
+                    <span class="badge" style="background:#d1fae5;color:#065f46;font-size:10px;font-weight:600;border-radius:20px;padding:3px 8px;">
+                        Achieved
+                    </span>
+                </div>
+                <div style="font-size:28px;font-weight:700;color:#059669;line-height:1;">€0</div>
+                <div style="font-size:12px;color:#065f46;font-weight:600;margin-top:4px;">Expired Season Overstock</div>
+                <div style="font-size:11px;color:#059669;margin-top:8px;padding-top:8px;border-top:1px solid #6ee7b7;">
+                    No stock remains past its season end date
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="card h-100" style="border-radius:14px;padding:20px;border:1px solid var(--border);">
+                <div class="d-flex align-items-start justify-content-between mb-3">
+                    <div style="width:40px;height:40px;border-radius:10px;background:#ede9fe;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                        <i class="fa-solid fa-calendar-xmark" style="color:#7c3aed;font-size:16px;"></i>
+                    </div>
+                    <span class="badge" style="background:#ede9fe;color:#5b21b6;font-size:10px;font-weight:600;border-radius:20px;padding:3px 8px;">
+                        Past Season
+                    </span>
+                </div>
+                <div style="font-size:28px;font-weight:700;color:#7c3aed;line-height:1;">
+                    €@Model.SeasonalOverstockValue.ToString("N0")
+                </div>
+                <div style="font-size:12px;color:var(--muted);margin-top:4px;">Expired Season Overstock</div>
+                <div style="font-size:11px;color:var(--muted);margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
+                    Cost value of stock past its season end date
+                </div>
+            </div>
+        }
+    </div>
+
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     COLLECTION HEALTH SUMMARY
+     ══════════════════════════════════════════════════════════════════ -->
+@if (!string.IsNullOrEmpty(Model.CollectionSummary))
+{
+    <div class="mb-4" style="border:1px solid #6ee7b7;border-radius:14px;padding:16px 22px;background:linear-gradient(135deg,#f0fdf4,#ecfdf5);display:flex;align-items:flex-start;gap:14px;">
+        <div style="width:36px;height:36px;border-radius:10px;background:#d1fae5;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;">
+            <i class="fa-solid fa-leaf" style="color:#059669;font-size:14px;"></i>
+        </div>
+        <div>
+            <div style="font-size:11px;font-weight:700;color:#059669;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:4px;">Collection Health Summary</div>
+            <p style="font-size:14px;color:#1f2937;line-height:1.55;margin:0;font-weight:500;">@Model.CollectionSummary</p>
+        </div>
+    </div>
+}
+
+<!-- ══════════════════════════════════════════════════════════════════
+     SECTION 2 — SEASON TIMELINE
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="card mb-4" style="border-radius:16px;border:1px solid var(--border);">
+    <div class="card-body" style="padding:24px;">
+        <div class="d-flex align-items-center justify-content-between mb-4">
+            <div>
+                <h2 style="font-size:16px;font-weight:700;color:var(--text);margin:0;">Collection Efficiency Timeline</h2>
+                <p style="font-size:12px;color:var(--muted);margin:4px 0 0;">Sell-through performance by seasonal collection — past seasons show final efficiency; active seasons show real-time waste risk</p>
+            </div>
+        </div>
+
+        <div class="d-flex flex-column gap-3">
+            @foreach (var s in Model.Seasons)
+            {
+                <div style="border:1px solid @StatusBorder(s.StatusColor);border-radius:12px;padding:16px 20px;background:@(s.Status == "Critical" ? "#fff8f8" : s.Status == "Closed" ? "#f8fafc" : "white");">
+                    <div class="d-flex align-items-center gap-3 flex-wrap">
+
+                        <!-- Season label + status badge -->
+                        <div style="min-width:130px;">
+                            <div style="font-size:15px;font-weight:700;color:var(--text);">@s.SeasonName</div>
+                            <span style="display:inline-block;margin-top:4px;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;background:@StatusBg(s.StatusColor);color:@StatusFg(s.StatusColor);">
+                                @s.Status.ToUpper()
+                            </span>
+                        </div>
+
+                        <!-- STR progress bar -->
+                        <div style="flex:1;min-width:220px;">
+                            <div style="font-size:11px;color:var(--muted);margin-bottom:6px;">Sell-Through Rate</div>
+                            @{
+                                string _bc = s.StatusColor == "emerald" ? "#10b981"
+                                           : s.StatusColor == "amber"   ? "#f59e0b"
+                                           : s.StatusColor == "red"     ? "#ef4444"
+                                           :                              "#94a3b8";
+                            }
+                            <div class="d-flex align-items-center gap-2">
+                                <div style="flex:1;height:18px;border-radius:9px;background:#e5e7eb;overflow:hidden;">
+                                    <div style="height:100%;width:@(Math.Min(100m, s.SellThroughRate).ToString("N1"))%;background:@_bc;border-radius:9px;transition:width 0.7s ease;"></div>
+                                </div>
+                                <span style="font-size:13px;font-weight:700;color:@StatusFg(s.StatusColor);min-width:46px;text-align:right;white-space:nowrap;">
+                                    @s.SellThroughRate.ToString("N1")%
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- Stats -->
+                        <div class="d-flex gap-4">
+                            <div class="text-center">
+                                <div style="font-size:13px;font-weight:700;color:var(--text);">@s.SoldUnits.ToString("N0")</div>
+                                <div style="font-size:10px;color:var(--muted);">Sold</div>
+                            </div>
+                            <div class="text-center">
+                                <div style="font-size:13px;font-weight:700;color:var(--text);">@s.RemainingUnits.ToString("N0")</div>
+                                <div style="font-size:10px;color:var(--muted);">Remaining</div>
+                            </div>
+                            @if (!s.IsCore)
+                            {
+                                <div class="text-center">
+                                    <div style="font-size:13px;font-weight:700;color:@(s.DaysToEnd < 0 ? "#7c3aed" : s.DaysToEnd <= 60 ? "#dc2626" : "var(--text)");">
+                                        @DaysLabel(s.DaysToEnd)
+                                    </div>
+                                    <div style="font-size:10px;color:var(--muted);">@(s.DaysToEnd < 0 ? "Season Closed" : "To Season End")</div>
+                                </div>
+                            }
+                            @if (s.AtRiskValue > 0)
+                            {
+                                <div class="text-center">
+                                    <div style="font-size:13px;font-weight:700;color:#dc2626;">€@s.AtRiskValue.ToString("N0")</div>
+                                    <div style="font-size:10px;color:var(--muted);">Cost at Risk</div>
+                                </div>
+                            }
+                        </div>
+
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     SECTION 3 + 4 — WASTE RISK MATRIX  |  SELL-THROUGH BY CATEGORY
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="row g-3 mb-4">
+
+    <!-- Waste Risk Matrix -->
+    <div class="col-lg-7">
+        <div class="card h-100" style="border-radius:16px;border:1px solid var(--border);">
+            <div class="card-body" style="padding:24px;">
+                <div class="mb-3">
+                    <h2 style="font-size:16px;font-weight:700;color:var(--text);margin:0;">Waste Risk Matrix</h2>
+                    <p style="font-size:12px;color:var(--muted);margin:4px 0 0;">
+                        Each bubble = one Category × Season. X = days to season end · Y = sell-through rate · Bubble size = € at risk.
+                    </p>
+                </div>
+                <div style="position:relative;height:340px;">
+                    <canvas id="wasteRiskChart"></canvas>
+                </div>
+                <div class="d-flex justify-content-between mt-2" style="font-size:10px;color:var(--muted);">
+                    <span>← Closer to season end</span>
+                    <span>Further from deadline →</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sell-Through by Category -->
+    <div class="col-lg-5">
+        <div class="card h-100" style="border-radius:16px;border:1px solid var(--border);">
+            <div class="card-body" style="padding:24px;">
+                <div class="mb-3">
+                    <h2 style="font-size:16px;font-weight:700;color:var(--text);margin:0;">Sell-Through by Category</h2>
+                    <p style="font-size:12px;color:var(--muted);margin:4px 0 0;">Categories below 80% have waste risk. Below 60% requires immediate attention.</p>
+                </div>
+
+                <div class="d-flex flex-column gap-3">
+                    @foreach (var cat in Model.CategorySellThroughs)
+                    {
+                        <div>
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span style="font-size:13px;font-weight:600;color:var(--text);">@cat.Category</span>
+                                <div class="d-flex align-items-center gap-2">
+                                    <span style="font-size:11px;color:var(--muted);">@cat.SoldUnits.ToString("N0") sold · @cat.RemainingUnits.ToString("N0") left</span>
+                                    <span style="font-size:12px;font-weight:700;color:@StatusFg(cat.StatusColor);">@cat.SellThroughRate.ToString("N1")%</span>
+                                </div>
+                            </div>
+                            <div style="height:8px;border-radius:6px;background:var(--border);overflow:hidden;display:flex;">
+                                <div style="width:@cat.SellThroughRate.ToString("N1")%;background:@(cat.StatusColor == "emerald" ? "#10b981" : cat.StatusColor == "amber" ? "#f59e0b" : "#ef4444");border-radius:6px 0 0 6px;max-width:100%;"></div>
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                <div class="d-flex gap-3 mt-4" style="font-size:11px;">
+                    <div class="d-flex align-items-center gap-1"><div style="width:10px;height:10px;border-radius:50%;background:#10b981;"></div>≥80% Healthy</div>
+                    <div class="d-flex align-items-center gap-1"><div style="width:10px;height:10px;border-radius:50%;background:#f59e0b;"></div>60–79% Monitor</div>
+                    <div class="d-flex align-items-center gap-1"><div style="width:10px;height:10px;border-radius:50%;background:#ef4444;"></div>&lt;60% At Risk</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     SECTION 5 — MARKDOWN DEPENDENCY ANALYSIS
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="card mb-4" style="border-radius:16px;border:1px solid var(--border);">
+    <div class="card-body" style="padding:24px;">
+
+        <div class="mb-4">
+            <h2 style="font-size:16px;font-weight:700;color:var(--text);margin:0;">Markdown Dependency Analysis</h2>
+            <p style="font-size:12px;color:var(--muted);margin:4px 0 0;">
+                Demand composition by category — how much volume clears at full price versus requires discounting to move.
+                Persistent high markdown dependency is a structural overproduction signal, not a pricing problem.
+            </p>
+        </div>
+
+        @{
+            var md5NetTotal   = Model.CategoryMarkdowns.Sum(m => m.TotalUnitsSold);
+            var md5MdUnits    = Model.CategoryMarkdowns.Sum(m => m.MarkdownUnitsSold);
+            var md5FpUnits    = md5NetTotal - md5MdUnits;
+            var md5FpRate     = md5NetTotal > 0 ? (decimal)md5FpUnits / md5NetTotal * 100m : 0m;
+            var md5MdRate     = md5NetTotal > 0 ? (decimal)md5MdUnits / md5NetTotal * 100m : 0m;
+            var md5RiskyCount = Model.CategoryMarkdowns.Count(m => m.MarkdownDependency >= 50m);
+            var md5AvgDisc    = Model.CategoryMarkdowns.Any() ? Model.CategoryMarkdowns.Average(m => m.AvgDiscountPercent) : 0m;
+            var md5MaxUnits   = Model.CategoryMarkdowns.Any() ? Model.CategoryMarkdowns.Max(m => m.TotalUnitsSold) : 1;
+        }
+
+        <!-- Network summary strip -->
+        <div class="row g-3 mb-4">
+            <div class="col-sm-4">
+                <div style="border:1px solid #6ee7b7;border-radius:12px;padding:14px 18px;background:#f0fdf4;">
+                    <div style="font-size:10px;color:#059669;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Full-Price Sell Rate</div>
+                    <div style="font-size:24px;font-weight:700;color:#059669;line-height:1.1;">@md5FpRate.ToString("N1")%</div>
+                    <div style="font-size:11px;color:var(--muted);margin-top:3px;">@md5FpUnits.ToString("N0") of @md5NetTotal.ToString("N0") units at full price</div>
+                </div>
+            </div>
+            <div class="col-sm-4">
+                @{
+                    string md5MdBorder = md5MdRate >= 50m ? "#fca5a5" : md5MdRate >= 30m ? "#fcd34d" : "#6ee7b7";
+                    string md5MdBg     = md5MdRate >= 50m ? "#fff8f8" : md5MdRate >= 30m ? "#fffdf0" : "#f0fdf4";
+                    string md5MdFg     = md5MdRate >= 50m ? "#991b1b" : md5MdRate >= 30m ? "#92400e" : "#065f46";
+                    string md5MdNum    = md5MdRate >= 50m ? "#dc2626" : md5MdRate >= 30m ? "#d97706" : "#059669";
+                }
+                <div style="border:1px solid @md5MdBorder;border-radius:12px;padding:14px 18px;background:@md5MdBg;">
+                    <div style="font-size:10px;color:@md5MdFg;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Network Markdown Rate</div>
+                    <div style="font-size:24px;font-weight:700;color:@md5MdNum;line-height:1.1;">@md5MdRate.ToString("N1")%</div>
+                    <div style="font-size:11px;color:var(--muted);margin-top:3px;">Avg discount depth: @md5AvgDisc.ToString("N1")%</div>
+                </div>
+            </div>
+            <div class="col-sm-4">
+                @{
+                    string md5RkBorder = md5RiskyCount >= 3 ? "#fca5a5" : md5RiskyCount >= 1 ? "#fcd34d" : "#6ee7b7";
+                    string md5RkBg     = md5RiskyCount >= 3 ? "#fff8f8" : md5RiskyCount >= 1 ? "#fffdf0" : "#f0fdf4";
+                    string md5RkFg     = md5RiskyCount >= 3 ? "#991b1b" : md5RiskyCount >= 1 ? "#92400e" : "#065f46";
+                    string md5RkNum    = md5RiskyCount >= 3 ? "#dc2626" : md5RiskyCount >= 1 ? "#d97706" : "#059669";
+                }
+                <div style="border:1px solid @md5RkBorder;border-radius:12px;padding:14px 18px;background:@md5RkBg;">
+                    <div style="font-size:10px;color:@md5RkFg;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Overproduction Signals</div>
+                    <div style="font-size:24px;font-weight:700;color:@md5RkNum;line-height:1.1;">
+                        @md5RiskyCount <span style="font-size:14px;font-weight:500;color:var(--muted);">of @Model.CategoryMarkdowns.Count</span>
+                    </div>
+                    <div style="font-size:11px;color:var(--muted);margin-top:3px;">Categories above 50% markdown dependency</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Per-category demand composition rows -->
+        <div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:0.07em;text-transform:uppercase;margin-bottom:10px;">
+            Demand Composition by Category &nbsp;
+            <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;">Bar width = relative category volume &nbsp;·&nbsp; <span style="color:#10b981;font-weight:600;">■</span> Full-price &nbsp;<span style="color:#f59e0b;font-weight:600;">■</span> Markdown</span>
+        </div>
+
+        <div class="d-flex flex-column gap-2">
+            @foreach (var m in Model.CategoryMarkdowns)
+            {
+                var md5Fp     = m.TotalUnitsSold - m.MarkdownUnitsSold;
+                double md5FpP = m.TotalUnitsSold > 0 ? (double)md5Fp / m.TotalUnitsSold * 100.0 : 0.0;
+                double md5MdP = m.TotalUnitsSold > 0 ? (double)m.MarkdownUnitsSold / m.TotalUnitsSold * 100.0 : 0.0;
+                double md5Bw  = md5MaxUnits > 0 ? (double)m.TotalUnitsSold / md5MaxUnits * 100.0 : 0.0;
+
+                string md5Sig = m.MarkdownDependency >= 60m ? "Overproduction Signal"
+                              : m.MarkdownDependency >= 40m ? "Elevated Dependency"
+                              : m.MarkdownDependency >= 20m ? "Within Norms"
+                              : "Full-Price Dominant";
+
+                string md5Impl = m.MarkdownDependency >= 60m
+                    ? $"Buy quantity systematically exceeds natural demand — reduce next-season allocation by 15–20%. Only {(int)md5FpP}% of volume clears at full price."
+                    : m.MarkdownDependency >= 40m
+                    ? $"Discount reliance is elevated and eroding margin. Avg depth of {m.AvgDiscountPercent.ToString("N1")}% signals misaligned pricing or excess stock."
+                    : m.MarkdownDependency >= 20m
+                    ? "Markdown use is within fashion retail norms. Monitor trend direction before adjusting buy plans."
+                    : "Strong full-price absorption. Buy quantity is well-calibrated to market demand.";
+
+                string md5BarColor = m.StatusColor == "red" ? "#ef4444" : "#f59e0b";
+
+                <div style="border:1px solid @StatusBorder(m.StatusColor);border-radius:12px;padding:14px 18px;background:@(m.StatusColor == "red" ? "#fff8f8" : "white");">
+                    <div class="d-flex align-items-center justify-content-between gap-3 flex-wrap mb-2">
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            <span style="font-size:14px;font-weight:700;color:var(--text);">@m.Category</span>
+                            <span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:8px;background:@StatusBg(m.StatusColor);color:@StatusFg(m.StatusColor);">
+                                @md5Sig
+                            </span>
+                        </div>
+                        <div class="d-flex align-items-center gap-4">
+                            <div class="text-end">
+                                <div style="font-size:20px;font-weight:700;color:@StatusFg(m.StatusColor);line-height:1.1;">@m.MarkdownDependency.ToString("N1")%</div>
+                                <div style="font-size:10px;color:var(--muted);">markdown dep.</div>
+                            </div>
+                            <div class="text-end">
+                                <div style="font-size:14px;font-weight:600;color:var(--muted);line-height:1.1;">@m.AvgDiscountPercent.ToString("N1")%</div>
+                                <div style="font-size:10px;color:var(--muted);">avg discount</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Stacked demand composition bar — outer width encodes relative category volume -->
+                    <div style="width:@(md5Bw.ToString("N1"))%;min-width:40%;max-width:100%;height:14px;border-radius:7px;background:#f1f5f9;overflow:hidden;display:flex;margin-bottom:8px;">
+                        <div style="width:@(md5FpP.ToString("N1"))%;background:#10b981;flex-shrink:0;"></div>
+                        <div style="width:@(md5MdP.ToString("N1"))%;background:@md5BarColor;flex-shrink:0;"></div>
+                    </div>
+
+                    <div class="d-flex align-items-start justify-content-between gap-2 flex-wrap">
+                        <div class="d-flex gap-3" style="font-size:11px;color:var(--muted);">
+                            <span><span style="color:#10b981;font-weight:700;">■</span> @md5Fp.ToString("N0") full-price</span>
+                            <span><span style="color:@md5BarColor;font-weight:700;">■</span> @m.MarkdownUnitsSold.ToString("N0") markdown</span>
+                        </div>
+                        <span style="font-size:11px;color:var(--muted);font-style:italic;max-width:420px;text-align:right;line-height:1.5;">@md5Impl</span>
+                    </div>
+                </div>
+            }
+        </div>
+
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     SECTION 6 — AT-RISK SKU TABLE
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="card mb-4" style="border-radius:16px;border:1px solid var(--border);">
+    <div class="card-body" style="padding:24px;">
+        <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
+            <div>
+                <h2 style="font-size:16px;font-weight:700;color:var(--text);margin:0;">At-Risk SKU Table</h2>
+                <p style="font-size:12px;color:var(--muted);margin:4px 0 0;">
+                    Showing top @Model.AtRiskSkus.Count highest-risk products · Sorted by Waste Risk Score descending
+                </p>
+            </div>
+            <div class="d-flex gap-2">
+                <div class="d-flex align-items-center gap-1" style="font-size:11px;">
+                    <div style="width:10px;height:10px;border-radius:50%;background:#ef4444;"></div> Critical (≥65)
+                </div>
+                <div class="d-flex align-items-center gap-1" style="font-size:11px;">
+                    <div style="width:10px;height:10px;border-radius:50%;background:#f59e0b;"></div> Monitor (35–64)
+                </div>
+                <div class="d-flex align-items-center gap-1" style="font-size:11px;">
+                    <div style="width:10px;height:10px;border-radius:50%;background:#10b981;"></div> Healthy (&lt;35)
+                </div>
+            </div>
+        </div>
+
+        <div style="max-height:460px;overflow-y:auto;border-radius:10px;border:1px solid var(--border);">
+            <table class="table" style="font-size:12px;margin-bottom:0;">
+                <thead style="position:sticky;top:0;z-index:2;background:#f8fafc;box-shadow:0 1px 0 #e5e7eb;">
+                    <tr style="border-bottom:2px solid var(--border);">
+                        <th style="font-weight:600;color:var(--muted);padding:10px 12px;">Product</th>
+                        <th style="font-weight:600;color:var(--muted);padding:10px 12px;">Category</th>
+                        <th style="font-weight:600;color:var(--muted);padding:10px 12px;">Season</th>
+                        <th style="font-weight:600;color:var(--muted);padding:10px 12px;text-align:right;">STR%</th>
+                        <th style="font-weight:600;color:var(--muted);padding:10px 12px;text-align:right;">Stock</th>
+                        <th style="font-weight:600;color:var(--muted);padding:10px 12px;text-align:right;">At-Risk €</th>
+                        <th style="font-weight:600;color:var(--muted);padding:10px 12px;">Days to End</th>
+                        <th style="font-weight:600;color:var(--muted);padding:10px 12px;text-align:center;">Risk Score</th>
+                        <th style="font-weight:600;color:var(--muted);padding:10px 12px;">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var sku in Model.AtRiskSkus)
+                    {
+                        <tr style="border-bottom:1px solid var(--border);@(sku.IsDeadStock ? "background:#fffbeb;" : "")">
+                            <td style="padding:10px 12px;max-width:190px;">
+                                <div style="font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="@sku.ProductName">
+                                    @if (sku.IsDeadStock)
+                                    {
+                                        <i class="fa-solid fa-box-archive text-warning me-1" title="Dead Stock"></i>
+                                    }
+                                    @sku.ProductName
+                                </div>
+                                <div style="font-size:10px;color:var(--muted);margin-top:2px;">@sku.StoreName</div>
+                            </td>
+                            <td style="padding:10px 12px;color:var(--muted);">@sku.Category</td>
+                            <td style="padding:10px 12px;">
+                                <span style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:8px;background:@StatusBg(sku.RiskColor);color:@StatusFg(sku.RiskColor);">
+                                    @sku.SeasonName
+                                </span>
+                            </td>
+                            <td style="padding:10px 12px;text-align:right;font-weight:700;color:@(sku.SellThroughRate < 60m ? "#dc2626" : sku.SellThroughRate < 80m ? "#d97706" : "#059669");">
+                                @sku.SellThroughRate.ToString("N1")%
+                            </td>
+                            <td style="padding:10px 12px;text-align:right;color:var(--muted);">@sku.CurrentStock</td>
+                            <td style="padding:10px 12px;text-align:right;font-weight:600;color:@(sku.AtRiskValue > 0 ? "#dc2626" : "var(--muted)");">
+                                @(sku.AtRiskValue > 0 ? $"€{sku.AtRiskValue:N0}" : "—")
+                            </td>
+                            <td style="padding:10px 12px;font-size:11px;color:@(sku.DaysToSeasonEnd < 0 ? "#7c3aed" : sku.DaysToSeasonEnd <= 60 ? "#dc2626" : "var(--muted)");">
+                                @DaysLabel(sku.DaysToSeasonEnd)
+                            </td>
+                            <td style="padding:10px 12px;text-align:center;">
+                                <div style="display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;background:@StatusBg(sku.RiskColor);font-weight:700;font-size:12px;color:@StatusFg(sku.RiskColor);">
+                                    @sku.WasteRiskScore
+                                </div>
+                            </td>
+                            <td style="padding:10px 12px;font-size:11px;">
+                                <span style="white-space:nowrap;padding:3px 8px;border-radius:8px;background:@StatusBg(sku.RiskColor);color:@StatusFg(sku.RiskColor);font-weight:600;">
+                                    @sku.RecommendedAction
+                                </span>
+                            </td>
+                        </tr>
+                    }
+                    @if (!Model.AtRiskSkus.Any())
+                    {
+                        <tr>
+                            <td colspan="9" class="text-center" style="padding:32px;color:var(--muted);">
+                                <i class="fa-solid fa-circle-check me-2" style="color:#10b981;"></i>
+                                No at-risk SKUs detected. Inventory is well-managed.
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     SECTION 7 — SUSTAINABILITY RECOMMENDATIONS
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="card mb-4" style="border-radius:16px;border:1px solid var(--border);">
+    <div class="card-body" style="padding:24px;">
+        <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
+            <div>
+                <h2 style="font-size:16px;font-weight:700;color:var(--text);margin:0;">Sustainability Recommendations</h2>
+                <p style="font-size:12px;color:var(--muted);margin:4px 0 0;">
+                    @Model.TotalRecommendationCount recommendation@(Model.TotalRecommendationCount != 1 ? "s" : "") generated from inventory waste analysis
+                </p>
+            </div>
+        </div>
+
+        @{
+            int recActiveSeas = Model.Seasons.Count(s => s.Status != "Closed" && !s.IsCore);
+            int recClosedSeas = Model.Seasons.Count(s => s.Status == "Closed");
+        }
+        <div style="background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:11px 16px;margin-bottom:16px;font-size:12px;color:var(--muted);line-height:1.7;">
+            <i class="fa-solid fa-diagram-project me-1" style="color:#6366f1;"></i>
+            Analysis of <strong style="color:var(--text);">@Model.AtRiskSkus.Count at-risk products</strong>
+            across <strong style="color:var(--text);">@recActiveSeas active collection@(recActiveSeas != 1 ? "s" : "")</strong>
+            and <strong style="color:var(--text);">@recClosedSeas closed season@(recClosedSeas != 1 ? "s" : "")</strong>
+            generated <strong style="color:var(--text);">@Model.TotalRecommendationCount recommendation@(Model.TotalRecommendationCount != 1 ? "s" : "")</strong>
+            — <strong style="color:#dc2626;">@Model.ActNowRecs.Count immediate action@(Model.ActNowRecs.Count != 1 ? "s" : "")</strong>,
+            <strong style="color:#d97706;">@Model.MonitorRecs.Count to monitor</strong>, and
+            <strong style="color:#059669;">@Model.PlanBetterRecs.Count strategic planning insight@(Model.PlanBetterRecs.Count != 1 ? "s" : "")</strong>.
+        </div>
+
+        <!-- Bootstrap Tabs -->
+        <ul class="nav nav-tabs mb-4" id="recTabs" role="tablist" style="border-bottom:2px solid var(--border);">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="act-now-tab" data-bs-toggle="tab" data-bs-target="#actNowPane"
+                        type="button" role="tab" style="font-size:13px;font-weight:600;">
+                    <i class="fa-solid fa-fire me-1" style="color:#dc2626;"></i>
+                    Act Now <span class="badge ms-1" style="background:#fee2e2;color:#991b1b;font-size:10px;">@Model.ActNowRecs.Count</span>
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="monitor-tab" data-bs-toggle="tab" data-bs-target="#monitorPane"
+                        type="button" role="tab" style="font-size:13px;font-weight:600;">
+                    <i class="fa-solid fa-eye me-1" style="color:#d97706;"></i>
+                    Monitor <span class="badge ms-1" style="background:#fef3c7;color:#92400e;font-size:10px;">@Model.MonitorRecs.Count</span>
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="plan-tab" data-bs-toggle="tab" data-bs-target="#planPane"
+                        type="button" role="tab" style="font-size:13px;font-weight:600;">
+                    <i class="fa-solid fa-lightbulb me-1" style="color:#059669;"></i>
+                    Plan Better <span class="badge ms-1" style="background:#d1fae5;color:#065f46;font-size:10px;">@Model.PlanBetterRecs.Count</span>
+                </button>
+            </li>
+        </ul>
+
+        <div class="tab-content" id="recTabContent">
+
+            <!-- ACT NOW -->
+            <div class="tab-pane fade show active" id="actNowPane" role="tabpanel">
+                @if (!Model.ActNowRecs.Any())
+                {
+                    <div class="text-center" style="padding:32px;color:var(--muted);">
+                        <i class="fa-solid fa-circle-check me-2" style="color:#10b981;"></i>No urgent actions required.
+                    </div>
+                }
+                <div class="d-flex flex-column gap-3">
+                    @foreach (var r in Model.ActNowRecs)
+                    {
+                        <div style="border:1px solid #fca5a5;border-radius:12px;padding:18px 20px;background:#fff8f8;">
+                            <div class="d-flex align-items-start gap-3">
+                                <div style="width:38px;height:38px;border-radius:10px;background:#fee2e2;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                                    <i class="fa-solid @r.Icon" style="color:#dc2626;font-size:15px;"></i>
+                                </div>
+                                <div style="flex:1;">
+                                    <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;">@r.Title</div>
+                                    <p style="font-size:13px;color:var(--muted);margin-bottom:8px;line-height:1.5;">@r.Explanation</p>
+                                    <div style="font-size:12px;color:#991b1b;font-weight:600;padding:8px 12px;background:#fee2e2;border-radius:8px;margin-bottom:8px;">
+                                        <i class="fa-solid fa-circle-arrow-right me-1"></i>@r.SuggestedAction
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                                        @if (r.FinancialImpact > 0)
+                                        {
+                                            <span style="font-size:12px;font-weight:700;color:#dc2626;">
+                                                <i class="fa-solid fa-euro-sign me-1"></i>€@r.FinancialImpact.ToString("N0") — @r.ImpactLabel
+                                            </span>
+                                        }
+                                        <span style="font-size:10px;background:#f1f5f9;color:var(--muted);padding:2px 8px;border-radius:8px;">@r.DataBadge</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <!-- MONITOR -->
+            <div class="tab-pane fade" id="monitorPane" role="tabpanel">
+                @if (!Model.MonitorRecs.Any())
+                {
+                    <div class="text-center" style="padding:32px;color:var(--muted);">
+                        <i class="fa-solid fa-circle-check me-2" style="color:#10b981;"></i>Nothing to monitor right now.
+                    </div>
+                }
+                <div class="d-flex flex-column gap-3">
+                    @foreach (var r in Model.MonitorRecs)
+                    {
+                        <div style="border:1px solid #fcd34d;border-radius:12px;padding:18px 20px;background:#fffdf0;">
+                            <div class="d-flex align-items-start gap-3">
+                                <div style="width:38px;height:38px;border-radius:10px;background:#fef3c7;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                                    <i class="fa-solid @r.Icon" style="color:#d97706;font-size:15px;"></i>
+                                </div>
+                                <div style="flex:1;">
+                                    <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;">@r.Title</div>
+                                    <p style="font-size:13px;color:var(--muted);margin-bottom:8px;line-height:1.5;">@r.Explanation</p>
+                                    <div style="font-size:12px;color:#92400e;font-weight:600;padding:8px 12px;background:#fef3c7;border-radius:8px;margin-bottom:8px;">
+                                        <i class="fa-solid fa-circle-arrow-right me-1"></i>@r.SuggestedAction
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                                        @if (r.FinancialImpact > 0)
+                                        {
+                                            <span style="font-size:12px;font-weight:700;color:#d97706;">
+                                                <i class="fa-solid fa-euro-sign me-1"></i>€@r.FinancialImpact.ToString("N0") — @r.ImpactLabel
+                                            </span>
+                                        }
+                                        <span style="font-size:10px;background:#f1f5f9;color:var(--muted);padding:2px 8px;border-radius:8px;">@r.DataBadge</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <!-- PLAN BETTER -->
+            <div class="tab-pane fade" id="planPane" role="tabpanel">
+                @if (!Model.PlanBetterRecs.Any())
+                {
+                    <div class="text-center" style="padding:32px;color:var(--muted);">
+                        <i class="fa-solid fa-circle-check me-2" style="color:#10b981;"></i>No buying pattern corrections identified.
+                    </div>
+                }
+                <div class="d-flex flex-column gap-3">
+                    @foreach (var r in Model.PlanBetterRecs)
+                    {
+                        <div style="border:1px solid #6ee7b7;border-radius:12px;padding:18px 20px;background:#f0fdf4;">
+                            <div class="d-flex align-items-start gap-3">
+                                <div style="width:38px;height:38px;border-radius:10px;background:#d1fae5;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                                    <i class="fa-solid @r.Icon" style="color:#059669;font-size:15px;"></i>
+                                </div>
+                                <div style="flex:1;">
+                                    <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;">@r.Title</div>
+                                    <p style="font-size:13px;color:var(--muted);margin-bottom:8px;line-height:1.5;">@r.Explanation</p>
+                                    <div style="font-size:12px;color:#065f46;font-weight:600;padding:8px 12px;background:#d1fae5;border-radius:8px;margin-bottom:8px;">
+                                        <i class="fa-solid fa-circle-arrow-right me-1"></i>@r.SuggestedAction
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                                        <span style="font-size:12px;font-weight:600;color:#059669;">@r.ImpactLabel</span>
+                                        <span style="font-size:10px;background:#f1f5f9;color:var(--muted);padding:2px 8px;border-radius:8px;">@r.DataBadge</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     METHODOLOGY MODAL
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="methodologyModal" tabindex="-1" aria-labelledby="methodologyModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content" style="border-radius:16px;">
+            <div class="modal-header" style="border-bottom:1px solid var(--border);padding:20px 24px;">
+                <h5 class="modal-title" id="methodologyModalLabel" style="font-weight:700;">
+                    <i class="fa-solid fa-circle-info me-2" style="color:#059669;"></i>
+                    Analytical Methodology
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" style="padding:24px;">
+
+                <div class="mb-4">
+                    <h6 style="font-weight:700;color:var(--text);margin-bottom:8px;">Why Financial Waste as a Sustainability Proxy?</h6>
+                    <p style="font-size:13px;color:var(--muted);line-height:1.6;">
+                        Every unit of unsold fashion inventory represents raw materials, manufacturing energy, and logistics that generated no commercial value.
+                        Reducing overproduction by 10% reduces the environmental footprint of that inventory by 10% — without requiring carbon emission factors.
+                        This approach is data-honest and academically defensible: it grounds sustainability analysis in observable financial data rather than estimated environmental multipliers.
+                    </p>
+                </div>
+
+                <div class="mb-4">
+                    <h6 style="font-weight:700;color:var(--text);margin-bottom:8px;">Sell-Through Rate (STR)</h6>
+                    <div style="background:#f8fafc;border-radius:10px;padding:14px;font-family:monospace;font-size:13px;color:var(--text);margin-bottom:8px;">
+                        STR = SoldUnits / (SoldUnits + CurrentStock) × 100
+                    </div>
+                    <p style="font-size:13px;color:var(--muted);line-height:1.6;">
+                        <strong>SoldUnits</strong> = cumulative Sales.Quantity per product.
+                        <strong>CurrentStock</strong> = Inventory.CurrentStock at time of calculation.
+                        This derivation is valid because inventory is only decremented on sale and restocked by the API — meaning
+                        <em>SoldUnits + CurrentStock ≡ Estimated Initial Stock Received</em>.
+                        Industry benchmark: ≥80% STR per seasonal collection (Caro &amp; Martínez-de-Albéniz, 2015).
+                    </p>
+                </div>
+
+                <div class="mb-4">
+                    <h6 style="font-weight:700;color:var(--text);margin-bottom:8px;">At-Risk Inventory Value</h6>
+                    <div style="background:#f8fafc;border-radius:10px;padding:14px;font-family:monospace;font-size:13px;color:var(--text);margin-bottom:8px;">
+                        AtRiskValue = CurrentStock × BaseCost<br/>
+                        Applied to: IsSeasonal = true AND STR &lt; 70% AND DaysToSeasonEnd ≤ 180
+                    </div>
+                    <p style="font-size:13px;color:var(--muted);line-height:1.6;">
+                        BaseCost represents the cost-price paid by the retailer. At-risk value therefore quantifies
+                        the cost already sunk into inventory that may not recover its purchase price before the season closes.
+                    </p>
+                </div>
+
+                <div class="mb-4">
+                    <h6 style="font-weight:700;color:var(--text);margin-bottom:8px;">Dead Stock Definition</h6>
+                    <div style="background:#f8fafc;border-radius:10px;padding:14px;font-family:monospace;font-size:13px;color:var(--text);margin-bottom:8px;">
+                        IsDeadStock = CurrentStock &gt; 0 AND SalesQuantity(last 45 days) = 0
+                    </div>
+                    <p style="font-size:13px;color:var(--muted);line-height:1.6;">
+                        A 45-day window (≈6 weeks of trading) is used as the dead stock threshold. In fashion retail,
+                        six weeks without a single sale on an in-stock product is a strong signal of demand failure
+                        for that specific SKU in that location.
+                    </p>
+                </div>
+
+                <div class="mb-4">
+                    <h6 style="font-weight:700;color:var(--text);margin-bottom:8px;">Markdown Dependency Rate</h6>
+                    <div style="background:#f8fafc;border-radius:10px;padding:14px;font-family:monospace;font-size:13px;color:var(--text);margin-bottom:8px;">
+                        MarkdownDependency = Units sold (DiscountPercent ≥ 20%) / Total units sold × 100
+                    </div>
+                    <p style="font-size:13px;color:var(--muted);line-height:1.6;">
+                        A discount threshold of 20% is used as the markdown signal boundary — at this level, the retailer is
+                        meaningfully subsidising the sale. Categories consistently above 50% markdown dependency indicate
+                        that buy quantities systematically exceed natural demand, a classic overproduction pattern
+                        (Christopher, 2016; Ellen MacArthur Foundation, 2017).
+                    </p>
+                </div>
+
+                <div class="mb-4">
+                    <h6 style="font-weight:700;color:var(--text);margin-bottom:8px;">Waste Risk Score</h6>
+                    <div style="background:#f8fafc;border-radius:10px;padding:14px;font-family:monospace;font-size:13px;color:var(--text);margin-bottom:8px;">
+                        Score = STR_Component + TimePressure_Component + DeadStock_Bonus<br/><br/>
+                        STR_Component   = (1 − STR/100) × 50         [0–50 pts]<br/>
+                        TimePressure    = f(DaysToSeasonEnd)          [0–30 pts, seasonal only]<br/>
+                        DeadStock_Bonus = 20 if IsDeadStock else 0    [0–20 pts]<br/><br/>
+                        TimePressure: expired→30 | ≤30d→26 | ≤60d→20 | ≤90d→14 | ≤180d→7 | &gt;180d→3
+                    </div>
+                    <p style="font-size:13px;color:var(--muted);line-height:1.6;">
+                        Score ranges: ≥65 = Critical (red) · 35–64 = Monitor (amber) · &lt;35 = Healthy (green).
+                        Core products receive zero time pressure because they have no season-end deadline.
+                    </p>
+                </div>
+
+                <div class="mb-2">
+                    <h6 style="font-weight:700;color:var(--text);margin-bottom:8px;">Season End Date Logic</h6>
+                    <div style="background:#f8fafc;border-radius:10px;padding:14px;font-family:monospace;font-size:13px;color:var(--text);">
+                        AW24 → 1 Mar 2025 &nbsp;|&nbsp; SS25 → 1 Sep 2025<br/>
+                        AW25 → 1 Mar 2026 &nbsp;|&nbsp; SS26 → 1 Sep 2026<br/>
+                        Core → No deadline (DaysToEnd = ∞)
+                    </div>
+                </div>
+
+            </div>
+            <div class="modal-footer" style="border-top:1px solid var(--border);padding:16px 24px;">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"
+                        style="border-radius:8px;font-size:13px;">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+    Chart.defaults.font.family = "'Inter', sans-serif";
+    Chart.defaults.color = '#6b7280';
+
+    // ── Waste Risk Bubble Chart ─────────────────────────────────────────
+    (function () {
+        const datasets = @Html.Raw(bubbleJson);
+        const ctx = document.getElementById('wasteRiskChart');
+        if (!ctx || !datasets.length) return;
+
+        // Inline plugin: draws quadrant shading using Chart.js beforeDraw hook.
+        // No external dependency required — works with the base chart.js bundle.
+        const quadrantPlugin = {
+            id: 'quadrantShading',
+            beforeDraw(chart) {
+                const { ctx: c, chartArea, scales } = chart;
+                if (!chartArea || !scales.x || !scales.y) return;
+                const { left, right, top, bottom } = chartArea;
+                const x60 = Math.max(left,  Math.min(right,  scales.x.getPixelForValue(60)));
+                const y60 = Math.max(top,   Math.min(bottom, scales.y.getPixelForValue(60)));
+
+                c.save();
+                // Critical zone — bottom-left: near deadline + low STR
+                c.fillStyle = 'rgba(220,38,38,0.07)';
+                c.fillRect(left, y60, x60 - left, bottom - y60);
+
+                // Monitor zone — bottom-right: far deadline + low STR
+                c.fillStyle = 'rgba(245,158,11,0.05)';
+                c.fillRect(x60, y60, right - x60, bottom - y60);
+
+                // Well-managed zone — top-left: near deadline + high STR
+                c.fillStyle = 'rgba(245,158,11,0.04)';
+                c.fillRect(left, top, x60 - left, y60 - top);
+
+                // Healthy zone — top-right: far deadline + high STR
+                c.fillStyle = 'rgba(16,185,129,0.06)';
+                c.fillRect(x60, top, right - x60, y60 - top);
+
+                // Quadrant border lines
+                c.strokeStyle = 'rgba(0,0,0,0.08)';
+                c.lineWidth = 1;
+                c.setLineDash([4, 4]);
+                c.beginPath(); c.moveTo(x60, top); c.lineTo(x60, bottom); c.stroke();
+                c.beginPath(); c.moveTo(left, y60); c.lineTo(right, y60); c.stroke();
+                c.setLineDash([]);
+
+                // Quadrant zone labels — subtle, drawn above the shading
+                c.font = "600 9px 'Inter', sans-serif";
+                c.textBaseline = 'top';
+                c.textAlign = 'left';
+
+                c.fillStyle = 'rgba(185,28,28,0.55)';      // Critical Zone — bottom-left
+                c.fillText('Critical Zone', left + 8, y60 + 8);
+
+                c.fillStyle = 'rgba(161,98,7,0.5)';         // Monitor — bottom-right
+                c.fillText('Monitor', x60 + 8, y60 + 8);
+
+                c.fillStyle = 'rgba(161,98,7,0.4)';         // On Track — top-left
+                c.fillText('On Track', left + 8, top + 8);
+
+                c.fillStyle = 'rgba(5,150,105,0.55)';       // Healthy — top-right
+                c.fillText('Healthy', x60 + 8, top + 8);
+
+                c.restore();
+            }
+        };
+
+        new Chart(ctx, {
+            type: 'bubble',
+            data: { datasets },
+            plugins: [quadrantPlugin],
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: { font: { size: 11 }, boxWidth: 12, padding: 16 }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(17,24,39,0.92)',
+                        titleColor: '#f9fafb',
+                        bodyColor: '#d1d5db',
+                        padding: 12,
+                        cornerRadius: 10,
+                        callbacks: {
+                            title: () => '',
+                            label: function (ctx) {
+                                const d = ctx.raw;
+                                const daysLabel = d.days === 9999 ? 'No season deadline (Core)'
+                                               : d.days < 0      ? `Season expired ${Math.abs(d.days)} days ago`
+                                               :                    `${d.days} days to season end`;
+                                return [
+                                    `  ${d.cat}  ·  ${d.season}`,
+                                    `  Sell-through: ${d.str.toFixed(1)}%`,
+                                    `  ${daysLabel}`,
+                                    `  At-risk value: €${d.value.toLocaleString('en-IE', { maximumFractionDigits: 0 })}`,
+                                    `  Waste Risk Score: ${d.score} / 100`
+                                ];
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        min: -60,
+                        max: 420,
+                        title: { display: true, text: 'Days to Season End  (negative = expired)', font: { size: 11 } },
+                        grid: { color: 'rgba(0,0,0,0.04)' },
+                        ticks: { font: { size: 10 } }
+                    },
+                    y: {
+                        min: 0,
+                        max: 100,
+                        title: { display: true, text: 'Sell-Through Rate (%)', font: { size: 11 } },
+                        grid: { color: 'rgba(0,0,0,0.04)' },
+                        ticks: { font: { size: 10 }, callback: v => v + '%' }
+                    }
+                }
+            }
+        });
+    })();
+
+</script>
+}

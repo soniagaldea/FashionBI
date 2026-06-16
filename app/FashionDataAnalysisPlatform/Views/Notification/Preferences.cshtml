@@ -1,0 +1,160 @@
+@{
+    ViewData["Title"] = "Notification Preferences";
+}
+
+<div class="notif-pref-layout">
+
+    <!-- Page header -->
+    <div class="notif-pref-page-header">
+        <h1 class="dash-title">Notification Preferences</h1>
+        <p class="dash-subtitle">Control which alerts appear in your notification panel</p>
+    </div>
+
+    <!-- Settings card -->
+    <div class="card notif-pref-card">
+
+        <!-- Card header: section label on left, save action on right -->
+        <div class="notif-pref-card-header">
+            <div>
+                <div class="notif-pref-card-title">Alert Channels</div>
+                <div class="notif-pref-card-desc">Choose which modules can send alerts to your notification panel</div>
+            </div>
+            <div class="notif-pref-header-actions">
+                <span class="notif-pref-saved-msg" id="savedMsg">
+                    <i class="fa-solid fa-circle-check"></i> Saved
+                </span>
+                <button type="button" class="notif-pref-save-btn" onclick="savePrefs()">
+                    <i class="fa-solid fa-floppy-disk"></i> Save Preferences
+                </button>
+            </div>
+        </div>
+
+        <!-- Preference rows -->
+        <div class="notif-pref-list">
+
+            <div class="notif-pref-item">
+                <div class="notif-pref-item-body">
+                    <div class="notif-pref-item-icon" style="background:#ecfdf5;color:#10b981;">
+                        <i class="fa-solid fa-boxes-stacked"></i>
+                    </div>
+                    <div>
+                        <div class="notif-pref-item-label">Inventory Low Stock Alerts</div>
+                        <div class="notif-pref-item-desc">Out-of-stock and low stock threshold breaches</div>
+                    </div>
+                </div>
+                <label class="toggle-switch" aria-label="Inventory alerts">
+                    <input type="checkbox" id="pref-inventory" />
+                    <span class="toggle-track"></span>
+                </label>
+            </div>
+
+            <div class="notif-pref-item">
+                <div class="notif-pref-item-body">
+                    <div class="notif-pref-item-icon" style="background:#f0f1fd;color:#5b5fc7;">
+                        <i class="fa-solid fa-chart-simple"></i>
+                    </div>
+                    <div>
+                        <div class="notif-pref-item-label">Forecast Risk Alerts</div>
+                        <div class="notif-pref-item-desc">Demand forecast anomalies and accuracy warnings</div>
+                    </div>
+                </div>
+                <label class="toggle-switch" aria-label="Forecast alerts">
+                    <input type="checkbox" id="pref-forecasting" />
+                    <span class="toggle-track"></span>
+                </label>
+            </div>
+
+            <div class="notif-pref-item">
+                <div class="notif-pref-item-body">
+                    <div class="notif-pref-item-icon" style="background:#f3e8ff;color:#7c3aed;">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i>
+                    </div>
+                    <div>
+                        <div class="notif-pref-item-label">Smart Insights Recommendations</div>
+                        <div class="notif-pref-item-desc">ABC/XYZ matrix flags and KPI exception actions</div>
+                    </div>
+                </div>
+                <label class="toggle-switch" aria-label="Smart Insights alerts">
+                    <input type="checkbox" id="pref-smartInsights" />
+                    <span class="toggle-track"></span>
+                </label>
+            </div>
+
+            <div class="notif-pref-item">
+                <div class="notif-pref-item-body">
+                    <div class="notif-pref-item-icon" style="background:#dcfce7;color:#15803d;">
+                        <i class="fa-solid fa-leaf"></i>
+                    </div>
+                    <div>
+                        <div class="notif-pref-item-label">Sustainability Waste Alerts</div>
+                        <div class="notif-pref-item-desc">Dead stock, markdown dependency, and waste risk warnings</div>
+                    </div>
+                </div>
+                <label class="toggle-switch" aria-label="Sustainability alerts">
+                    <input type="checkbox" id="pref-sustainability" />
+                    <span class="toggle-track"></span>
+                </label>
+            </div>
+
+            <div class="notif-pref-item">
+                <div class="notif-pref-item-body">
+                    <div class="notif-pref-item-icon" style="background:#fef3c7;color:#b45309;">
+                        <i class="fa-solid fa-circle-info"></i>
+                    </div>
+                    <div>
+                        <div class="notif-pref-item-label">System Status Notifications</div>
+                        <div class="notif-pref-item-desc">Platform health checks and system-level messages</div>
+                    </div>
+                </div>
+                <label class="toggle-switch" aria-label="System notifications">
+                    <input type="checkbox" id="pref-system" />
+                    <span class="toggle-track"></span>
+                </label>
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- Hint line -->
+    <p class="notif-pref-hint">
+        <i class="fa-solid fa-circle-info"></i>
+        Preferences are stored in your browser and apply to the notification panel on every page.
+    </p>
+
+</div>
+
+@section Scripts {
+<script>
+    var PREFS_KEY = 'fashionbi-notif-prefs-v1';
+    var PREFS_IDS = ['inventory', 'forecasting', 'smartInsights', 'sustainability', 'system'];
+
+    function loadPrefs() {
+        try { return JSON.parse(localStorage.getItem(PREFS_KEY) || '{}'); } catch (_) { return {}; }
+    }
+
+    function initToggles() {
+        var prefs = loadPrefs();
+        PREFS_IDS.forEach(function (k) {
+            var el = document.getElementById('pref-' + k);
+            if (el) el.checked = (prefs[k] !== false);
+        });
+    }
+
+    function savePrefs() {
+        var prefs = {};
+        PREFS_IDS.forEach(function (k) {
+            var el = document.getElementById('pref-' + k);
+            prefs[k] = el ? el.checked : true;
+        });
+        localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+        try { sessionStorage.removeItem('fashionbi-notifs-v2'); } catch (_) {}
+
+        var msg = document.getElementById('savedMsg');
+        msg.style.display = 'flex';
+        setTimeout(function () { msg.style.display = 'none'; }, 2500);
+    }
+
+    initToggles();
+</script>
+}

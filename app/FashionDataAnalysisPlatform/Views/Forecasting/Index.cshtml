@@ -1,0 +1,1169 @@
+@model FashionDataAnalysisPlatform.ViewModels.ForecastingViewModel
+@{
+    ViewData["Title"] = "Demand Forecasting";
+    var hasSuccess = ViewBag.ForecastSuccess as string;
+    var hasError   = ViewBag.ForecastError   as string;
+}
+
+<!-- ══════════════════════════════════════════════════════════════════
+     PAGE HEADER
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="dash-header" style="flex-wrap:wrap;gap:12px;">
+    <div style="min-width:0;flex:1;">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <h1 class="dash-title">Demand Forecasting</h1>
+            <span class="badge rounded-pill"
+                  style="background:var(--indigo-100);color:var(--indigo-600);font-size:11px;font-weight:600;padding:4px 10px;white-space:nowrap;">
+                @(Model.HasForecasts ? Model.SelectedModel : "ML Ensemble") &middot; 3-Month Horizon
+            </span>
+        </div>
+        <p class="dash-subtitle">
+            @if (!string.IsNullOrEmpty(Model.DynamicSubtitle))
+            {
+                @Model.DynamicSubtitle
+            }
+            else
+            {
+                @:Planning and decision support — what will happen, how confident are we, and what to do next
+            }
+        </p>
+    </div>
+
+    <div class="dash-actions" style="flex-shrink:0;flex-wrap:wrap;gap:8px;align-items:center;">
+        @if (Model.HasForecasts)
+        {
+            <button class="export-btn" onclick="exportToPdf('Demand Forecasting')" title="Export this report as PDF">
+                <i class="fa-solid fa-arrow-up-from-bracket"></i> Export
+            </button>
+            <form method="post" asp-action="TriggerRefresh"
+                  asp-route-store="@Model.SelectedStore"
+                  asp-route-category="@Model.SelectedCategory"
+                  style="display:inline;">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="date-range-btn"
+                        id="regenerateBtn"
+                        onclick="showRefreshLoading(this)"
+                        title="Re-run the ML pipeline and regenerate forecasts">
+                    <i class="fa-solid fa-rotate me-1"></i> Regenerate Forecast
+                </button>
+            </form>
+        }
+        <button type="button" class="date-range-btn"
+                data-bs-toggle="modal" data-bs-target="#methodologyModal">
+            <i class="fa-solid fa-circle-info"></i> Methodology
+        </button>
+    </div>
+</div>
+
+<!-- ── Feedback banners ───────────────────────────────────────────────────── -->
+@if (!string.IsNullOrEmpty(hasSuccess))
+{
+    <div class="alert alert-success d-flex align-items-center gap-2 mb-3" role="alert"
+         style="border-radius:12px; font-size:14px;">
+        <i class="fa-solid fa-circle-check"></i>
+        <span>@hasSuccess</span>
+    </div>
+}
+@if (!string.IsNullOrEmpty(hasError))
+{
+    var errorDisplay = hasError.Contains('\n') ? hasError[..hasError.IndexOf('\n')].TrimEnd() : hasError;
+    <div class="alert alert-danger mb-3" role="alert"
+         style="border-radius:12px; font-size:14px;">
+        <i class="fa-solid fa-circle-exclamation me-2"></i>@errorDisplay
+    </div>
+}
+
+<!-- ══════════════════════════════════════════════════════════════════
+     EMPTY STATE — no forecasts yet
+     ══════════════════════════════════════════════════════════════════ -->
+@if (!Model.HasForecasts)
+{
+    <div class="d-flex justify-content-center align-items-center" style="min-height:55vh;">
+        <div class="card text-center" style="max-width:520px;width:100%;border-radius:20px;padding:48px 40px;">
+            <div style="width:72px;height:72px;background:var(--indigo-100);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 24px;">
+                <i class="fa-solid fa-chart-simple" style="font-size:28px;color:var(--indigo-600);"></i>
+            </div>
+            <h2 style="font-size:20px;font-weight:700;color:var(--text);margin-bottom:8px;">No Forecasts Generated Yet</h2>
+            <p style="font-size:14px;color:var(--muted);margin-bottom:28px;line-height:1.6;">
+                Click below to compare three forecasting models (Naive Baseline, Holt-Winters,
+                Random Forest) on the last 24&nbsp;months of sales data, automatically select
+                the best-performing one, and generate a 3-month demand forecast.
+                This typically takes 30–90&nbsp;seconds.
+            </p>
+            <form method="post" asp-action="TriggerRefresh" id="generateForm">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn btn-primary px-4 py-2"
+                        id="generateBtn"
+                        onclick="showGenerateLoading(this)"
+                        style="border-radius:10px;font-size:14px;font-weight:600;">
+                    <i class="fa-solid fa-wand-magic-sparkles me-2"></i>Generate Forecasts
+                </button>
+            </form>
+            <p class="mt-3" style="font-size:12px;color:var(--muted);">
+                Generate your first forecast to begin demand planning.
+            </p>
+        </div>
+    </div>
+}
+else
+{
+    <!-- ══════════════════════════════════════════════════════════════
+         FILTER PANEL
+         ══════════════════════════════════════════════════════════════ -->
+    <div class="card mb-4 no-print" style="border:1.5px solid var(--border);">
+        <div class="card-body" style="padding:14px 20px;">
+            <form method="get" asp-action="Index">
+                <div class="d-flex flex-wrap align-items-end gap-3">
+                    <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;
+                                align-self:center;white-space:nowrap;padding-bottom:2px;">
+                        <i class="fa-solid fa-sliders me-1"></i>Filters
+                    </div>
+                    <div>
+                        <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:var(--muted);">Store</label>
+                        <select name="store" class="form-select form-select-sm"
+                                style="min-width:180px;border-radius:8px;font-size:13px;border-color:var(--border);">
+                            <option value="">All Stores</option>
+                            @foreach (var s in Model.AvailableStores)
+                            {
+                                <option value="@s" selected="@(Model.SelectedStore == s)">@s</option>
+                            }
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label mb-1" style="font-size:11px;font-weight:600;color:var(--muted);">Category</label>
+                        <select name="category" class="form-select form-select-sm"
+                                style="min-width:160px;border-radius:8px;font-size:13px;border-color:var(--border);">
+                            <option value="">All Categories</option>
+                            @foreach (var c in Model.AvailableCategories)
+                            {
+                                <option value="@c" selected="@(Model.SelectedCategory == c)">@c</option>
+                            }
+                        </select>
+                    </div>
+                    <div>
+                        <button type="submit" class="btn btn-primary"
+                                style="border-radius:8px;font-size:13px;font-weight:600;padding:6px 20px;height:34px;">
+                            Apply
+                        </button>
+                    </div>
+                    @if (Model.SelectedStore != null || Model.SelectedCategory != null)
+                    {
+                        <div>
+                            <a asp-action="Index" class="btn btn-sm btn-outline-secondary"
+                               style="border-radius:8px;font-size:12px;height:34px;line-height:22px;">
+                                Clear
+                            </a>
+                        </div>
+                    }
+                    <div class="ms-auto" style="font-size:11px;color:var(--muted);align-self:center;white-space:nowrap;">
+                        <i class="fa-regular fa-clock me-1"></i>@(Model.LastGeneratedAt?.ToString("dd MMM yyyy, HH:mm") ?? "—")
+                        &nbsp;·&nbsp; @Model.SelectedModel
+                        &nbsp;·&nbsp; <span class="kpi-pill @Model.ConfidenceColorClass" style="font-size:10px;">@Model.ConfidenceLabel</span>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════
+         KPI CARDS — 4 cards  (Revenue is primary, gets extra width)
+         ══════════════════════════════════════════════════════════════ -->
+    <div class="kpi-grid mb-4" style="grid-template-columns: 1.7fr 1fr 1fr 1.3fr;">
+
+        @{
+            string YoYArrow(decimal? pct) => pct.HasValue && pct.Value >= 0 ? "↑" : "↓";
+            string YoYColor(decimal? pct) => pct.HasValue && pct.Value >= 0 ? "var(--emerald)" : "#ef4444";
+            string YoYSign(decimal? pct)  => pct.HasValue && pct.Value >= 0 ? "+" : "";
+        }
+
+        <!-- Revenue Forecast (hero card — accent top border, large indigo value) -->
+        <div class="card kpi-card" style="border-top:4px solid var(--indigo-600);background:var(--indigo-100);">
+            <div class="card-body">
+                <div class="kpi-top">
+                    <span class="kpi-label" style="color:var(--indigo-600);font-weight:700;text-transform:uppercase;letter-spacing:0.4px;font-size:11px;">Revenue Forecast</span>
+                    <div class="kpi-icon indigo"><i class="fa-solid fa-wallet"></i></div>
+                </div>
+                <div class="kpi-value" style="color:var(--indigo-600);font-size:32px;letter-spacing:-0.5px;">€@Model.NextMonthRevenue.ToString("N0")</div>
+                <div class="kpi-footer" style="display:flex;flex-direction:column;gap:3px;">
+                    <span class="kpi-pill indigo">@Model.NextMonthLabel</span>
+                    @if (Model.YoYNextMonthRevenuePct.HasValue)
+                    {
+                        <span style="font-size:11px;color:@YoYColor(Model.YoYNextMonthRevenuePct);font-weight:600;">
+                            @YoYArrow(Model.YoYNextMonthRevenuePct) @YoYSign(Model.YoYNextMonthRevenuePct)@Model.YoYNextMonthRevenuePct.Value.ToString("N1")% vs @Model.SameMonthLastYearLabel
+                        </span>
+                    }
+                    else
+                    {
+                        <span style="font-size:11px;color:var(--muted);">No prior year data</span>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Orders Forecast -->
+        <div class="card kpi-card">
+            <div class="card-body">
+                <div class="kpi-top">
+                    <span class="kpi-label">Orders Forecast</span>
+                    <div class="kpi-icon indigo"><i class="fa-solid fa-bag-shopping"></i></div>
+                </div>
+                <div class="kpi-value">@Model.NextMonthOrders.ToString("N0")</div>
+                <div class="kpi-footer" style="display:flex;flex-direction:column;gap:3px;">
+                    <span class="kpi-pill slate">@Model.NextMonthLabel</span>
+                    @if (Model.YoYNextMonthOrdersPct.HasValue)
+                    {
+                        <span style="font-size:11px;color:@YoYColor(Model.YoYNextMonthOrdersPct);font-weight:600;">
+                            @YoYArrow(Model.YoYNextMonthOrdersPct) @YoYSign(Model.YoYNextMonthOrdersPct)@Model.YoYNextMonthOrdersPct.Value.ToString("N1")% vs @Model.SameMonthLastYearLabel
+                        </span>
+                    }
+                    else
+                    {
+                        <span style="font-size:11px;color:var(--muted);">No prior year data</span>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Units Forecast -->
+        <div class="card kpi-card">
+            <div class="card-body">
+                <div class="kpi-top">
+                    <span class="kpi-label">Units Forecast</span>
+                    <div class="kpi-icon slate"><i class="fa-solid fa-cube"></i></div>
+                </div>
+                <div class="kpi-value">@Model.NextMonthUnits.ToString("N0")</div>
+                <div class="kpi-footer" style="display:flex;flex-direction:column;gap:3px;">
+                    <span class="kpi-pill slate">@Model.NextMonthLabel</span>
+                    @if (Model.YoYNextMonthUnitsPct.HasValue)
+                    {
+                        <span style="font-size:11px;color:@YoYColor(Model.YoYNextMonthUnitsPct);font-weight:600;">
+                            @YoYArrow(Model.YoYNextMonthUnitsPct) @YoYSign(Model.YoYNextMonthUnitsPct)@Model.YoYNextMonthUnitsPct.Value.ToString("N1")% vs @Model.SameMonthLastYearLabel
+                        </span>
+                    }
+                    else
+                    {
+                        <span style="font-size:11px;color:var(--muted);">No prior year data</span>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- 4th card: 3-month Forecast vs Same Period Last Year (expanded) -->
+        @{
+            var yoy3Up    = Model.YoYThreeMonthRevenuePct.HasValue && Model.YoYThreeMonthRevenuePct.Value >= 0;
+            var yoy3Color = yoy3Up ? "emerald" : "red";
+            var yoy3Icon  = yoy3Up ? "fa-arrow-trend-up" : "fa-arrow-trend-down";
+            var yoy3Hex   = yoy3Up ? "var(--emerald)" : "#ef4444";
+        }
+        <div class="card kpi-card" style="border-bottom:3px solid @yoy3Hex;">
+            <div class="card-body">
+                <div class="kpi-top">
+                    <span class="kpi-label">vs Same Period Last Year</span>
+                    <div class="kpi-icon @yoy3Color"><i class="fa-solid @yoy3Icon"></i></div>
+                </div>
+                @if (Model.YoYThreeMonthRevenuePct.HasValue)
+                {
+                    var sign3 = Model.YoYThreeMonthRevenuePct.Value >= 0 ? "+" : "";
+                    <div class="kpi-value" style="color:@yoy3Hex;">
+                        @sign3@Model.YoYThreeMonthRevenuePct.Value.ToString("N1")%
+                    </div>
+                    <div class="kpi-footer" style="display:flex;flex-direction:column;gap:4px;">
+                        <div style="display:flex;justify-content:space-between;gap:4px;">
+                            <span style="font-size:11px;color:var(--muted);">Forecast</span>
+                            <span style="font-size:11px;font-weight:700;color:var(--text);">€@((Model.NextThreeMonthRevenue / 1000).ToString("N1"))k</span>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;gap:4px;">
+                            <span style="font-size:11px;color:var(--muted);">Last year</span>
+                            <span style="font-size:11px;font-weight:600;color:var(--muted);">€@((Model.SameThreeMonthsLastYearRevenue / 1000).ToString("N1"))k</span>
+                        </div>
+                        <span style="font-size:10px;color:var(--muted);">@Model.ThreeMonthComparisonLabel (prior year)</span>
+                    </div>
+                }
+                else
+                {
+                    <div class="kpi-value" style="color:var(--muted);">N/A</div>
+                    <div class="kpi-footer"><span class="kpi-pill slate">No prior year data</span></div>
+                }
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════
+         3-MONTH FORECAST OUTLOOK
+         ══════════════════════════════════════════════════════════════ -->
+    @if (Model.ForecastMonthRows.Any())
+    {
+        <div class="card mb-4">
+            <div class="card-header">
+                <div class="chart-card-title">
+                    <i class="fa-solid fa-calendar-days me-2" style="color:var(--indigo-600);"></i>3-Month Forecast Outlook
+                </div>
+                <div class="chart-card-subtitle">Revenue, orders and units by forecast month with month-on-month growth direction</div>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-sm mb-0" style="font-size:13px;">
+                    <thead>
+                        <tr style="color:var(--muted);font-size:11px;font-weight:600;text-transform:uppercase;">
+                            <th class="ps-4" style="width:80px;">Period</th>
+                            <th style="width:120px;">Month</th>
+                            <th class="text-end" style="width:160px;">Revenue</th>
+                            <th class="text-end" style="width:120px;">Orders</th>
+                            <th class="text-end pe-4" style="width:120px;">Units</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in Model.ForecastMonthRows)
+                        {
+                            var hasChange  = row.RevenuePctVsPrevMonth.HasValue;
+                            var isUp       = hasChange && row.RevenuePctVsPrevMonth!.Value >= 0;
+                            var changeCol  = isUp ? "var(--emerald)" : "#ef4444";
+                            var changeSign = isUp ? "↑ +" : "↓ ";
+                            <tr style="border-bottom:1px solid var(--border);">
+                                <td class="ps-4">
+                                    <span style="display:inline-block;background:var(--indigo-100);color:var(--indigo-600);
+                                                 font-size:10px;font-weight:700;border-radius:5px;padding:2px 7px;">
+                                        @row.Tag
+                                    </span>
+                                </td>
+                                <td style="font-weight:600;color:var(--text);">@row.Label</td>
+                                <td class="text-end">
+                                    <span style="font-weight:700;color:var(--text);">€@row.Revenue.ToString("N0")</span>
+                                    @if (hasChange)
+                                    {
+                                        <br />
+                                        <span style="font-size:10px;color:@changeCol;font-weight:600;">
+                                            @changeSign@Math.Abs(row.RevenuePctVsPrevMonth!.Value).ToString("N1")%
+                                        </span>
+                                    }
+                                </td>
+                                <td class="text-end" style="color:var(--muted);">@row.Orders.ToString("N0")</td>
+                                <td class="text-end pe-4" style="color:var(--muted);">@row.Units.ToString("N0")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+
+    <!-- ══════════════════════════════════════════════════════════════
+         INVENTORY RISK ALERTS
+         ══════════════════════════════════════════════════════════════ -->
+    @if (Model.InventoryAlerts.Any())
+    {
+        <div class="card mb-4" style="border:1px solid rgba(239,68,68,0.3);">
+            <div class="card-header d-flex align-items-center justify-content-between"
+                 style="background:rgba(239,68,68,0.04);">
+                <div>
+                    <div class="chart-card-title">
+                        <i class="fa-solid fa-triangle-exclamation me-2" style="color:#ef4444;"></i>Inventory Risk Alerts
+                    </div>
+                    <div class="chart-card-subtitle">Forecast demand exceeds current stock — stock-out risk by store &amp; category</div>
+                </div>
+                @if (Model.TotalRevenueAtRisk > 0)
+                {
+                    <div style="text-align:right;flex-shrink:0;">
+                        <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.4px;">Total Revenue at Risk</div>
+                        <div style="font-size:22px;font-weight:800;color:#ef4444;letter-spacing:-0.5px;">€@Model.TotalRevenueAtRisk.ToString("N0")</div>
+                    </div>
+                }
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0" style="font-size:13px;">
+                        <thead>
+                            <tr style="color:var(--muted);font-size:11px;font-weight:600;text-transform:uppercase;">
+                                <th class="ps-4">Store</th>
+                                <th>Category</th>
+                                <th class="text-end">Forecast Units (3 mo.)</th>
+                                <th class="text-end">Current Stock</th>
+                                <th class="text-end">Coverage</th>
+                                <th class="text-end">Unit Gap</th>
+                                <th class="text-end pe-4">Revenue at Risk</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @{
+                                var topRisk = Model.InventoryAlerts.FirstOrDefault();
+                            }
+                            @foreach (var alert in Model.InventoryAlerts)
+                            {
+                                var isTop    = alert == topRisk && alert.RevenueAtRisk > 0;
+                                var isCrit   = alert.CoverageLabel == "Critical";
+                                var covColor = isCrit ? "#ef4444"
+                                             : alert.CoverageLabel == "Warning" ? "var(--amber)"
+                                             : "var(--emerald)";
+                                var rowBg    = isTop ? "background:rgba(239,68,68,0.08);border-left:3px solid #ef4444;"
+                                             : isCrit ? "background:rgba(239,68,68,0.04);" : "";
+                                <tr style="@rowBg">
+                                    <td class="ps-4 fw-medium">
+                                        @alert.StoreName
+                                        @if (isTop)
+                                        {
+                                            <span style="font-size:9px;font-weight:700;color:#ef4444;background:rgba(239,68,68,0.12);
+                                                         border-radius:4px;padding:1px 5px;margin-left:4px;">HIGHEST RISK</span>
+                                        }
+                                    </td>
+                                    <td>@alert.Category</td>
+                                    <td class="text-end">@alert.ForecastedUnits.ToString("N0")</td>
+                                    <td class="text-end">@alert.CurrentStock.ToString("N0")</td>
+                                    <td class="text-end">
+                                        <span style="font-size:11px;font-weight:600;color:@covColor;">
+                                            @alert.CoverageLabel (@alert.CoverageMonths.ToString("N1") mo.)
+                                        </span>
+                                    </td>
+                                    <td class="text-end">
+                                        <span style="color:#ef4444;font-weight:600;">−@alert.StockGap.ToString("N0")</span>
+                                    </td>
+                                    <td class="text-end pe-4">
+                                        <span style="color:#ef4444;font-weight:@(isTop ? "800" : "700");font-size:@(isTop ? "14px" : "13px");">
+                                            @(alert.RevenueAtRisk > 0 ? $"€{alert.RevenueAtRisk:N0}" : "—")
+                                        </span>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- ══════════════════════════════════════════════════════════════
+         ACTUAL vs FORECAST CHART (enhanced confidence band)
+         ══════════════════════════════════════════════════════════════ -->
+    <div class="row g-4 mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex align-items-start justify-content-between">
+                    <div>
+                        <div class="chart-card-title">Actual vs Forecast Revenue</div>
+                        <div class="chart-card-subtitle">
+                            Last 12 months actual &mdash; next 3 months forecast with
+                            ±@Model.RevenueMAPE.ToString("N1")% confidence band (@Model.ConfidenceLabel)
+                        </div>
+                    </div>
+                    <div class="d-flex gap-3 align-items-center flex-wrap" style="font-size:12px;color:var(--muted);">
+                        <span class="d-flex align-items-center gap-1">
+                            <span style="width:14px;height:3px;background:#5b5fc7;border-radius:2px;display:inline-block;"></span>
+                            Actual
+                        </span>
+                        <span class="d-flex align-items-center gap-1">
+                            <span style="width:14px;height:3px;border-top:2px dashed #10b981;display:inline-block;"></span>
+                            Forecast
+                        </span>
+                        <span class="d-flex align-items-center gap-1">
+                            <span style="width:14px;height:10px;background:rgba(16,185,129,0.22);border-radius:2px;display:inline-block;"></span>
+                            Confidence band
+                        </span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="chart-wrap" style="height:300px;">
+                        <canvas id="actualVsForecastChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════
+         STRATEGIC OUTLOOK  (centrepiece — moved above secondary charts)
+         ══════════════════════════════════════════════════════════════ -->
+    @if (Model.StrategicOutlook.Any())
+    {
+        <div class="card mb-4" style="border:1px solid rgba(91,95,199,0.2);">
+            <div class="card-header" style="background:linear-gradient(135deg,rgba(91,95,199,0.05) 0%,rgba(16,185,129,0.04) 100%);">
+                <div>
+                    <div class="chart-card-title" style="font-size:16px;">
+                        <i class="fa-solid fa-bullseye me-2" style="color:var(--indigo-600);"></i>Strategic Outlook
+                    </div>
+                    <div class="chart-card-subtitle">Prioritised actions by financial impact — derived from forecast output, inventory risk, and demand signals</div>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    @foreach (var item in Model.StrategicOutlook)
+                    {
+                        var sev = item.Severity;
+                        var sevBg     = sev == "Urgent"      ? "rgba(239,68,68,0.07)"
+                                      : sev == "Opportunity" ? "rgba(16,185,129,0.07)"
+                                      : "rgba(91,95,199,0.05)";
+                        var sevBorder = sev == "Urgent"      ? "#ef4444"
+                                      : sev == "Opportunity" ? "#10b981"
+                                      : "#5b5fc7";
+                        var sevBannerBg = sev == "Urgent"      ? "#ef4444"
+                                        : sev == "Opportunity" ? "#10b981"
+                                        : "#5b5fc7";
+                        var sevLabel  = sev == "Urgent"      ? "⚠ URGENT"
+                                      : sev == "Opportunity" ? "✦ OPPORTUNITY"
+                                      : "● WATCH";
+                        <div class="col-lg-6 col-12">
+                            <div style="border:2px solid @sevBorder;border-radius:14px;overflow:hidden;height:100%;display:flex;flex-direction:column;">
+                                <!-- Severity banner -->
+                                <div style="background:@sevBannerBg;padding:6px 16px;display:flex;align-items:center;gap:10px;">
+                                    <i class="fa-solid @item.Icon" style="color:#fff;font-size:15px;"></i>
+                                    <span style="font-size:11px;font-weight:800;color:#fff;letter-spacing:0.8px;">@sevLabel</span>
+                                </div>
+                                <!-- Card body -->
+                                <div style="background:@sevBg;padding:16px 18px;flex:1;display:flex;flex-direction:column;gap:8px;">
+                                    <div style="font-size:14px;font-weight:700;color:var(--text);">@item.Title</div>
+                                    <p style="font-size:12px;color:var(--muted);margin:0;line-height:1.55;">@item.Body</p>
+                                    @if (!string.IsNullOrEmpty(item.Impact))
+                                    {
+                                        <div style="font-size:12px;font-weight:700;color:@sevBorder;
+                                                    background:rgba(0,0,0,0.05);border-radius:6px;padding:5px 10px;display:inline-block;align-self:flex-start;">
+                                            <i class="fa-solid fa-chart-simple me-1"></i>@item.Impact
+                                        </div>
+                                    }
+                                    <div style="font-size:12px;color:var(--text);background:rgba(0,0,0,0.05);border-radius:8px;
+                                                padding:9px 12px;line-height:1.5;border-left:3px solid @sevBorder;margin-top:auto;">
+                                        <i class="fa-solid fa-chevron-right me-1" style="color:@sevBorder;font-size:10px;"></i>@item.Action
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- ══════════════════════════════════════════════════════════════
+         GROWTH OUTLOOK CHARTS (% change vs prior 3 months)
+         ══════════════════════════════════════════════════════════════ -->
+    @if (Model.CategoryGrowthLabelsJson != "[]" && Model.CategoryGrowthLabelsJson != "null")
+    {
+        bool hasStoreGrowth = Model.ShowStoreChart
+                           && Model.StoreGrowthLabelsJson != "[]"
+                           && Model.StoreGrowthLabelsJson != "null";
+        <div class="row g-4 mb-4">
+            <div class="col-lg-@(hasStoreGrowth ? "7" : "12") col-12">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <div class="chart-card-title">Category Growth Outlook</div>
+                        <div class="chart-card-subtitle">Forecast % change vs prior 3 months — positive = growth opportunity, negative = demand pullback</div>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-wrap" style="height:260px;">
+                            <canvas id="categoryGrowthChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            @if (hasStoreGrowth)
+            {
+                <div class="col-lg-5 col-12">
+                    <div class="card h-100">
+                        <div class="card-header">
+                            <div class="chart-card-title">Store Growth Outlook</div>
+                            <div class="chart-card-subtitle">Forecast % change vs prior 3 months per location</div>
+                        </div>
+                        <div class="card-body">
+                            <div class="chart-wrap" style="height:260px;">
+                                <canvas id="storeGrowthChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+    <!-- ══════════════════════════════════════════════════════════════
+         FORECAST TRACK RECORD  (only shown when ≥ 2 runs exist)
+         ══════════════════════════════════════════════════════════════ -->
+    @if (Model.TrackRecord.Count >= 2)
+    {
+    <div class="card mb-4">
+        <div class="card-header">
+            <div class="chart-card-title">
+                <i class="fa-solid fa-clock-rotate-left me-2" style="color:var(--indigo-600);"></i>Forecast Track Record
+            </div>
+            <div class="chart-card-subtitle">Historical forecast runs — model accuracy across regeneration events</div>
+        </div>
+        <div class="card-body">
+            <table class="table table-sm mb-0" style="font-size:13px;">
+                    <thead>
+                        <tr style="color:var(--muted);font-size:11px;font-weight:600;text-transform:uppercase;">
+                            <th>Run</th>
+                            <th>Generated</th>
+                            <th>Model</th>
+                            <th class="text-end">Revenue Accuracy</th>
+                            <th class="text-end">MAPE</th>
+                            <th class="text-end">Trend</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @for (int i = 0; i < Model.TrackRecord.Count; i++)
+                        {
+                            var tr   = Model.TrackRecord[i];
+                            var prev = i + 1 < Model.TrackRecord.Count ? Model.TrackRecord[i + 1] : null;
+                            var delta = prev != null ? tr.AccuracyPercent - prev.AccuracyPercent : (decimal?)null;
+                            var trendIcon  = delta.HasValue ? (delta.Value >= 0 ? "fa-arrow-up" : "fa-arrow-down") : "fa-minus";
+                            var trendColor = delta.HasValue ? (delta.Value >= 0 ? "var(--emerald)" : "#ef4444") : "var(--muted)";
+                            <tr style="@(i == 0 ? "background:var(--indigo-100);" : "")">
+                                <td style="font-weight:@(i == 0 ? "700" : "600");color:var(--indigo-600);">
+                                    #@(Model.TrackRecord.Count - i)
+                                    @if (i == 0)
+                                    {
+                                        <span style="font-size:9px;font-weight:700;color:var(--indigo-600);background:var(--indigo-100);
+                                                     border-radius:4px;padding:1px 5px;margin-left:4px;">LATEST</span>
+                                    }
+                                </td>
+                                <td>@tr.GeneratedAt.ToString("dd MMM yyyy, HH:mm")</td>
+                                <td>@tr.ModelName</td>
+                                <td class="text-end fw-semibold" style="color:var(--emerald);">@tr.AccuracyPercent.ToString("N1")%</td>
+                                <td class="text-end" style="color:var(--muted);">@tr.MAPE.ToString("N1")%</td>
+                                <td class="text-end">
+                                    @if (delta.HasValue)
+                                    {
+                                        <span style="color:@trendColor;font-size:11px;font-weight:600;">
+                                            <i class="fa-solid @trendIcon" style="font-size:9px;"></i>
+                                            @Math.Abs(delta.Value).ToString("N1")pp
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span style="color:var(--muted);font-size:11px;">—</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+        </div>
+    </div>
+    }
+
+    <!-- ══════════════════════════════════════════════════════════════
+         FORECAST DRIVERS  (business theme cards only)
+         ══════════════════════════════════════════════════════════════ -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <div class="chart-card-title">Forecast Drivers</div>
+            <div class="chart-card-subtitle">What is influencing the revenue forecast — grouped by business theme</div>
+        </div>
+        <div class="card-body">
+
+            @if (!string.IsNullOrEmpty(Model.FeatureInterpretation))
+            {
+                <div style="margin-bottom:20px;padding:14px 18px;background:var(--sidebar-bg);border-radius:12px;border:1px solid var(--border);">
+                    <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:6px;">
+                        <i class="fa-solid fa-lightbulb me-1" style="color:var(--amber);"></i>Executive Summary
+                    </div>
+                    <p style="font-size:13px;color:var(--text);line-height:1.65;margin:0;">@Model.FeatureInterpretation</p>
+                </div>
+            }
+
+            @if (Model.DriverGroups.Any())
+            {
+                <div class="row g-3">
+                    @foreach (var grp in Model.DriverGroups)
+                    {
+                        <div class="col-md-6 col-12">
+                            <div style="border:1px solid var(--border);border-radius:12px;padding:16px 18px;height:100%;">
+                                <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+                                    <div style="width:32px;height:32px;min-width:32px;border-radius:8px;background:@(grp.Color)22;
+                                                display:flex;align-items:center;justify-content:center;">
+                                        <i class="fa-solid @grp.Icon" style="color:@grp.Color;font-size:13px;"></i>
+                                    </div>
+                                    <div style="flex:1;">
+                                        <div style="display:flex;align-items:center;justify-content:space-between;">
+                                            <span style="font-size:13px;font-weight:700;color:var(--text);">@grp.Name</span>
+                                            <span style="font-size:13px;font-weight:800;color:@grp.Color;">@grp.Percentage.ToString("N0")%</span>
+                                        </div>
+                                        <div style="margin-top:6px;background:var(--border);border-radius:4px;height:6px;overflow:hidden;">
+                                            <div style="width:@grp.Percentage.ToString("N0")%;background:@grp.Color;height:100%;border-radius:4px;
+                                                        transition:width 0.6s ease;"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <p style="font-size:12px;color:var(--muted);margin:0;line-height:1.55;">@grp.Description</p>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+
+        </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════
+         FORECAST RELIABILITY (renamed from Model Accuracy)
+         ══════════════════════════════════════════════════════════════ -->
+    <div class="row g-4 mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <div class="chart-card-title">Forecast Reliability</div>
+                    <div class="chart-card-subtitle">How much can I trust this forecast?</div>
+                </div>
+                <div class="card-body">
+
+                    <!-- Lead answer -->
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-4 col-12">
+                            <div style="padding:18px 20px;border-radius:14px;border:2px solid var(--border);
+                                        background:var(--sidebar-bg);text-align:center;">
+                                <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px;">
+                                    Confidence Level
+                                </div>
+                                <div class="kpi-pill @Model.ConfidenceColorClass"
+                                     style="font-size:15px;font-weight:800;padding:8px 18px;display:inline-block;">
+                                    @Model.ConfidenceLabel
+                                </div>
+                                <div style="font-size:12px;color:var(--muted);margin-top:10px;line-height:1.5;">
+                                    @(Model.ForecastAccuracyPercent >= 70
+                                        ? "The model tracks actual sales closely. Revenue forecasts are reliable for planning."
+                                        : Model.ForecastAccuracyPercent >= 50
+                                        ? "The model captures the trend direction. Use forecasts with a reasonable buffer."
+                                        : "High forecast variance. Use as directional guidance rather than precise targets.")
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4 col-12">
+                            <div style="padding:18px 20px;border-radius:14px;border:2px solid var(--border);
+                                        background:var(--sidebar-bg);text-align:center;">
+                                <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px;">
+                                    Average Error
+                                </div>
+                                <div style="font-size:24px;font-weight:800;color:var(--text);">€@Model.RevenueMAE.ToString("N0")</div>
+                                <div style="font-size:12px;color:var(--muted);margin-top:6px;">per store-category-month</div>
+                                <div style="font-size:12px;color:var(--muted);margin-top:4px;">
+                                    Equivalent to ±@Model.RevenueMAPE.ToString("N1")% of actual revenue
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4 col-12">
+                            <div style="padding:18px 20px;border-radius:14px;border:2px solid var(--border);
+                                        background:var(--sidebar-bg);text-align:center;">
+                                <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px;">
+                                    Revenue Accuracy
+                                </div>
+                                <div style="font-size:24px;font-weight:800;color:var(--emerald);">@Model.ForecastAccuracyPercent.ToString("N1")%</div>
+                                <div style="font-size:12px;color:var(--muted);margin-top:6px;">Orders: @Model.OrdersAccuracyPercent.ToString("N1")%</div>
+                                <div style="font-size:12px;color:var(--muted);">Units: @Model.UnitsAccuracyPercent.ToString("N1")%</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    @if (Model.ModelComparison.Any())
+                    {
+                        <div style="border-top:1px solid var(--border);padding-top:16px;">
+                            <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:10px;">
+                                Model Comparison — Revenue WMAPE (lower is better)
+                            </div>
+                            <table class="table table-sm mb-0" style="font-size:12px;">
+                                <thead>
+                                    <tr style="color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase;">
+                                        <th>Model</th>
+                                        <th class="text-end">WMAPE</th>
+                                        <th class="text-end">Accuracy</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var entry in Model.ModelComparison)
+                                    {
+                                        <tr style="@(entry.IsSelected ? "background:var(--indigo-100);" : "")">
+                                            <td style="font-weight:@(entry.IsSelected ? "700" : "400");">@entry.ModelName</td>
+                                            <td class="text-end">@entry.RevenueMAPE.ToString("N1")%</td>
+                                            <td class="text-end">@entry.RevenueAccuracy.ToString("N1")%</td>
+                                            <td class="text-end">
+                                                @if (entry.IsSelected)
+                                                {
+                                                    <span style="color:var(--indigo-600);font-size:10px;font-weight:700;">&#10003; selected</span>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+
+                    <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:12px;font-size:11px;color:var(--muted);line-height:1.8;">
+                        <strong style="color:var(--text);">Training window:</strong> Last 24 months &nbsp;·&nbsp;
+                        <strong style="color:var(--text);">Validation:</strong> Time-based split — last 3 months held out &nbsp;·&nbsp;
+                        <strong style="color:var(--text);">Selection metric:</strong> WMAPE (Revenue) — lowest wins
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+} <!-- end HasForecasts -->
+
+<!-- ══════════════════════════════════════════════════════════════════
+     METHODOLOGY MODAL
+     ══════════════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="methodologyModal" tabindex="-1" aria-labelledby="methodologyModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content" style="border-radius:16px;border:1px solid var(--border);">
+
+            <div class="modal-header" style="border-bottom:1px solid var(--border);padding:20px 26px;">
+                <div>
+                    <h5 class="modal-title" id="methodologyModalLabel" style="font-weight:700;font-size:17px;color:var(--text);">
+                        <i class="fa-solid fa-circle-info me-2" style="color:var(--indigo-600);"></i>Analytical Methodology
+                    </h5>
+                    <p style="font-size:12px;color:var(--muted);margin:4px 0 0;">
+                        Academic transparency — how the Demand Forecasting module works end-to-end
+                    </p>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body" style="padding:24px 28px;">
+
+                <div class="mb-4 pb-4" style="border-bottom:1px solid var(--border);">
+                    <h6 style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:12px;">
+                        <span style="display:inline-block;width:24px;height:24px;border-radius:6px;background:var(--indigo-100);color:var(--indigo-600);font-size:11px;font-weight:800;text-align:center;line-height:24px;margin-right:8px;">1</span>
+                        Data &amp; Training Window
+                    </h6>
+                    <p style="font-size:13px;color:var(--muted);margin-bottom:10px;line-height:1.6;">
+                        Sales data is aggregated at Store × Category × Month granularity over a rolling 24-month window.
+                        Each row records total Revenue, Order count, and Units sold for one store-category-month combination.
+                    </p>
+                    <div class="row g-2">
+                        <div class="col-sm-4"><div style="background:#f8fafc;border-radius:10px;padding:12px 14px;"><div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:4px;">Granularity</div><div style="font-size:11px;color:var(--muted);line-height:1.5;">Store × Category × Month</div></div></div>
+                        <div class="col-sm-4"><div style="background:#f8fafc;border-radius:10px;padding:12px 14px;"><div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:4px;">Training Window</div><div style="font-size:11px;color:var(--muted);line-height:1.5;">Rolling 24 months; last 3 held out for validation</div></div></div>
+                        <div class="col-sm-4"><div style="background:#f8fafc;border-radius:10px;padding:12px 14px;"><div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:4px;">Targets</div><div style="font-size:11px;color:var(--muted);line-height:1.5;">Revenue (€), Orders, Units — forecasted simultaneously</div></div></div>
+                    </div>
+                </div>
+
+                <div class="mb-4 pb-4" style="border-bottom:1px solid var(--border);">
+                    <h6 style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:12px;">
+                        <span style="display:inline-block;width:24px;height:24px;border-radius:6px;background:var(--indigo-100);color:var(--indigo-600);font-size:11px;font-weight:800;text-align:center;line-height:24px;margin-right:8px;">2</span>
+                        Feature Engineering (17 features)
+                    </h6>
+                    <div class="row g-2">
+                        <div class="col-sm-6"><div style="background:#f8fafc;border-radius:10px;padding:12px 14px;"><div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px;">Lag / Momentum Features</div><div style="font-size:11px;color:var(--muted);line-height:1.7;">Lag-1, Lag-3, Lag-6 Revenue (rolling) · Lag-1 Orders &amp; Units · Lag-12 Revenue / Orders / Units (YoY)</div></div></div>
+                        <div class="col-sm-6"><div style="background:#f8fafc;border-radius:10px;padding:12px 14px;"><div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px;">Calendar &amp; Seasonal Flags</div><div style="font-size:11px;color:var(--muted);line-height:1.7;">Year · Month · Quarter · Store &amp; Category ordinals · Holiday Month · Collection Launch · Summer · Winter</div></div></div>
+                    </div>
+                </div>
+
+                <div class="mb-4 pb-4" style="border-bottom:1px solid var(--border);">
+                    <h6 style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:12px;">
+                        <span style="display:inline-block;width:24px;height:24px;border-radius:6px;background:var(--indigo-100);color:var(--indigo-600);font-size:11px;font-weight:800;text-align:center;line-height:24px;margin-right:8px;">3</span>
+                        Models Evaluated
+                    </h6>
+                    <div class="row g-2">
+                        <div class="col-12"><div style="background:#f8fafc;border-radius:10px;padding:12px 14px;margin-bottom:6px;"><div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:4px;"><i class="fa-solid fa-minus me-1" style="color:#94a3b8;"></i>Naive Baseline (Persistence)</div><div style="font-size:11px;color:var(--muted);line-height:1.5;">Repeats the last observed training value for all 3 forecast months. Acts as a performance floor.</div></div></div>
+                        <div class="col-12"><div style="background:#f8fafc;border-radius:10px;padding:12px 14px;margin-bottom:6px;"><div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:4px;"><i class="fa-solid fa-wave-square me-1" style="color:#f59e0b;"></i>Holt-Winters Exponential Smoothing</div><div style="font-size:11px;color:var(--muted);line-height:1.5;">Per-series fitting with additive trend + seasonal (period=12) when ≥12 months available; falls back to trend-only → SES. Parameters optimised automatically. (Hyndman &amp; Athanasopoulos, 2021)</div></div></div>
+                        <div class="col-12"><div style="background:#f8fafc;border-radius:10px;padding:12px 14px;"><div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:4px;"><i class="fa-solid fa-tree me-1" style="color:#10b981;"></i>Random Forest (200 trees, multi-output)</div><div style="font-size:11px;color:var(--muted);line-height:1.5;">scikit-learn RandomForestRegressor wrapped in MultiOutputRegressor. Jointly predicts Revenue, Orders, Units on all 17 features. Feature importances (Gini reduction) persisted per target. (Breiman, 2001)</div></div></div>
+                    </div>
+                </div>
+
+                <div class="mb-4 pb-4" style="border-bottom:1px solid var(--border);">
+                    <h6 style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:12px;">
+                        <span style="display:inline-block;width:24px;height:24px;border-radius:6px;background:var(--indigo-100);color:var(--indigo-600);font-size:11px;font-weight:800;text-align:center;line-height:24px;margin-right:8px;">4</span>
+                        Validation &amp; Automatic Model Selection
+                    </h6>
+                    <div style="font-size:12px;color:var(--muted);line-height:1.9;">
+                        <strong style="color:var(--text);">Primary metric — WMAPE (Revenue):</strong> Σ|actual − predicted| ÷ Σactual × 100. Volume-weighted so large-revenue series contribute more.<br>
+                        <strong style="color:var(--text);">Selection:</strong> Lowest Revenue WMAPE on the held-out 3-month test window wins. All models' metrics stored for the comparison table.<br>
+                        <strong style="color:var(--text);">Confidence bands:</strong> ±WMAPE applied to each forecast month to produce upper and lower bounds. Accuracy ≥ 70% → High · ≥ 50% → Medium · &lt; 50% → Low.
+                    </div>
+                </div>
+
+                <div class="mb-4 pb-4" style="border-bottom:1px solid var(--border);">
+                    <h6 style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:12px;">
+                        <span style="display:inline-block;width:24px;height:24px;border-radius:6px;background:var(--indigo-100);color:var(--indigo-600);font-size:11px;font-weight:800;text-align:center;line-height:24px;margin-right:8px;">5</span>
+                        Inventory Risk &amp; Revenue at Risk
+                    </h6>
+                    <div style="font-size:12px;color:var(--muted);line-height:1.9;">
+                        <strong style="color:var(--text);">Alert condition:</strong> Forecasted 3-month units &gt; current stock for a Store × Category combination.<br>
+                        <strong style="color:var(--text);">Coverage:</strong> Current stock ÷ (forecasted units ÷ 3). Critical &lt; 1 mo. · Warning 1–2 mo. · Healthy ≥ 2 mo.<br>
+                        <strong style="color:var(--text);">Revenue at Risk:</strong> Unit gap × average selling price (forecast revenue ÷ forecast units). Converts operational shortfall into financial exposure.
+                    </div>
+                </div>
+
+                <div>
+                    <h6 style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:12px;">
+                        <span style="display:inline-block;width:24px;height:24px;border-radius:6px;background:var(--indigo-100);color:var(--indigo-600);font-size:11px;font-weight:800;text-align:center;line-height:24px;margin-right:8px;">6</span>
+                        YoY &amp; Growth Comparisons
+                    </h6>
+                    <div style="font-size:12px;color:var(--muted);line-height:1.9;">
+                        <strong style="color:var(--text);">KPI cards:</strong> Each forecast KPI is compared to the actual for the same calendar month one year prior (queried from Sales table).<br>
+                        <strong style="color:var(--text);">3-month card:</strong> Total 3-month forecast revenue is compared to the sum of the same 3 calendar months from the prior year.<br>
+                        <strong style="color:var(--text);">Growth charts:</strong> Forecast 3-month revenue vs actual revenue from the prior 3 months. Positive bars = projected growth; negative bars = projected pullback.<br>
+                        <strong style="color:var(--text);">Outlook rows:</strong> Month-on-month % change from the preceding period (M+1 vs last actual month; M+2 vs M+1; M+3 vs M+2).
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="modal-footer" style="border-top:1px solid var(--border);padding:14px 26px;">
+                <span style="font-size:11px;color:var(--muted);flex:1;">
+                    FashionBI · Demand Forecasting · Bachelor Thesis 2026
+                </span>
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+// ── Data from server ──────────────────────────────────────────────────────
+var allLabels       = @Html.Raw(Model.AllLabelsJson);
+var actualDataset   = @Html.Raw(Model.ActualDatasetJson);
+var forecastDataset = @Html.Raw(Model.ForecastDatasetJson);
+var upperBound      = @Html.Raw(Model.UpperBoundDatasetJson);
+var lowerBound      = @Html.Raw(Model.LowerBoundDatasetJson);
+
+var catGrowthLabels  = @Html.Raw(Model.CategoryGrowthLabelsJson);
+var catGrowthValues  = @Html.Raw(Model.CategoryGrowthValuesJson);
+var storeGrowthLabels = @Html.Raw(Model.StoreGrowthLabelsJson);
+var storeGrowthValues = @Html.Raw(Model.StoreGrowthValuesJson);
+
+
+// ── Chart.js defaults ────────────────────────────────────────────────────
+Chart.defaults.font.family = "'Inter', sans-serif";
+Chart.defaults.font.size   = 12;
+Chart.defaults.color       = "#8b8fa8";
+
+// ── Plugin: vertical separator + forecast region shading ─────────────────
+var forecastSeparatorPlugin = {
+    id: 'forecastSeparator',
+    beforeDraw: function(chart) {
+        var ctx       = chart.ctx;
+        var chartArea = chart.chartArea;
+        var xScale    = chart.scales.x;
+        // Shade the entire forecast region (index 11 → end)
+        var xStart = xScale.getPixelForValue(11);
+        var xEnd   = chartArea.right;
+        ctx.save();
+        ctx.fillStyle = 'rgba(16,185,129,0.05)';
+        ctx.fillRect(xStart, chartArea.top, xEnd - xStart, chartArea.bottom - chartArea.top);
+        ctx.restore();
+    },
+    afterDraw: function(chart) {
+        var ctx       = chart.ctx;
+        var chartArea = chart.chartArea;
+        var xScale    = chart.scales.x;
+        var xPos      = xScale.getPixelForValue(11);
+        ctx.save();
+        ctx.setLineDash([5, 4]);
+        ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(xPos, chartArea.top);
+        ctx.lineTo(xPos, chartArea.bottom);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = 'rgba(0,0,0,0.38)';
+        ctx.font = '500 10px Inter, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText('Forecast →', xPos + 6, chartArea.top + 14);
+        ctx.restore();
+    }
+};
+
+// ── 1. Actual vs Forecast with enhanced confidence band ───────────────────
+(function () {
+    var ctx = document.getElementById("actualVsForecastChart");
+    if (!ctx) return;
+
+    new Chart(ctx, {
+        type: "line",
+        data: {
+            labels: allLabels,
+            datasets: [
+                {
+                    label:           "Lower Bound",
+                    data:            lowerBound,
+                    borderWidth:     0,
+                    borderColor:     "transparent",
+                    backgroundColor: "transparent",
+                    pointRadius:     0,
+                    fill:            false,
+                    spanGaps:        false,
+                    tension:         0.3,
+                },
+                {
+                    label:           "Confidence Band",
+                    data:            upperBound,
+                    borderWidth:     0,
+                    borderColor:     "transparent",
+                    backgroundColor: "rgba(16,185,129,0.20)",
+                    pointRadius:     0,
+                    fill:            '-1',
+                    spanGaps:        false,
+                    tension:         0.3,
+                },
+                {
+                    label:           "Actual Revenue",
+                    data:            actualDataset,
+                    borderColor:     "#5b5fc7",
+                    backgroundColor: "rgba(91,95,199,0.07)",
+                    borderWidth:     2.5,
+                    pointRadius:     3,
+                    pointHoverRadius: 6,
+                    tension:         0.35,
+                    fill:            true,
+                    spanGaps:        false,
+                },
+                {
+                    label:           "Forecast Revenue",
+                    data:            forecastDataset,
+                    borderColor:     "#10b981",
+                    backgroundColor: "transparent",
+                    borderWidth:     2.5,
+                    borderDash:      [6, 4],
+                    pointRadius:     4,
+                    pointHoverRadius: 7,
+                    pointStyle:      "rectRot",
+                    tension:         0.3,
+                    fill:            false,
+                    spanGaps:        false,
+                },
+            ],
+        },
+        options: {
+            responsive:          true,
+            maintainAspectRatio: false,
+            interaction: { mode: "index", intersect: false },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function (ctx) {
+                            if (ctx.parsed.y === null || ctx.parsed.y === undefined) return null;
+                            var lbl = ctx.dataset.label;
+                            if (lbl === "Lower Bound" || lbl === "Confidence Band") return null;
+                            return " " + lbl + ": €" + ctx.parsed.y.toLocaleString("en-IE", { maximumFractionDigits: 0 });
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: { grid: { color: "rgba(0,0,0,0.04)" }, ticks: { maxRotation: 0 } },
+                y: {
+                    grid: { color: "rgba(0,0,0,0.04)" },
+                    ticks: {
+                        callback: function (v) {
+                            return "€" + (v >= 1000 ? (v / 1000).toFixed(0) + "k" : v);
+                        }
+                    }
+                }
+            }
+        },
+        plugins: [forecastSeparatorPlugin]
+    });
+}());
+
+// ── Helper: build growth bar colors (green positive / red negative) ───────
+function growthColors(values) {
+    return values.map(function(v) { return v >= 0 ? "rgba(16,185,129,0.75)" : "rgba(239,68,68,0.75)"; });
+}
+function growthBorders(values) {
+    return values.map(function(v) { return v >= 0 ? "#10b981" : "#ef4444"; });
+}
+
+// ── 2. Category Growth Chart ──────────────────────────────────────────────
+(function () {
+    var ctx = document.getElementById("categoryGrowthChart");
+    if (!ctx || !catGrowthLabels || !catGrowthLabels.length) return;
+
+    new Chart(ctx, {
+        type: "bar",
+        data: {
+            labels: catGrowthLabels,
+            datasets: [{
+                label: "Revenue Growth %",
+                data: catGrowthValues,
+                backgroundColor: growthColors(catGrowthValues),
+                borderColor: growthBorders(catGrowthValues),
+                borderWidth: 1.5,
+                borderRadius: 5
+            }]
+        },
+        options: {
+            indexAxis: "y",
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function(ctx) {
+                            var v = ctx.parsed.x;
+                            return " " + (v >= 0 ? "+" : "") + v.toFixed(1) + "% vs prior 3 months";
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { color: "rgba(0,0,0,0.04)" },
+                    ticks: { callback: function(v) { return (v >= 0 ? "+" : "") + v + "%"; } }
+                },
+                y: { grid: { display: false } }
+            }
+        }
+    });
+}());
+
+// ── 3. Store Growth Chart ─────────────────────────────────────────────────
+(function () {
+    var ctx = document.getElementById("storeGrowthChart");
+    if (!ctx || !storeGrowthLabels || !storeGrowthLabels.length) return;
+
+    new Chart(ctx, {
+        type: "bar",
+        data: {
+            labels: storeGrowthLabels,
+            datasets: [{
+                label: "Revenue Growth %",
+                data: storeGrowthValues,
+                backgroundColor: growthColors(storeGrowthValues),
+                borderColor: growthBorders(storeGrowthValues),
+                borderWidth: 1.5,
+                borderRadius: 5
+            }]
+        },
+        options: {
+            indexAxis: "y",
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function(ctx) {
+                            var v = ctx.parsed.x;
+                            return " " + (v >= 0 ? "+" : "") + v.toFixed(1) + "% vs prior 3 months";
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { color: "rgba(0,0,0,0.04)" },
+                    ticks: { callback: function(v) { return (v >= 0 ? "+" : "") + v + "%"; } }
+                },
+                y: { grid: { display: false } }
+            }
+        }
+    });
+}());
+
+// ── Loading state helpers ─────────────────────────────────────────────────
+function showRefreshLoading(btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i> Generating… (30–60s)';
+}
+
+function showGenerateLoading(btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Generating Forecasts… (30–60s)';
+}
+</script>
+}
