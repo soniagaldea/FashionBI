@@ -47,9 +47,13 @@ FEATURE_COLS_ORIGINAL = [
     "is_summer", "is_winter",
 ]
 
-# Extended 17-feature set — adds year-over-year lag for seasonal pattern learning
+# Extended 18-feature set — adds YoY lags and a binary flag that tells the
+# model which rows have genuine prior-year data (months 1-12 of a 24-month
+# window have no real YoY observation; the flag lets the RF branch cleanly
+# between "no prior history" and "true YoY value").
 FEATURE_COLS = FEATURE_COLS_ORIGINAL + [
     "lag_12_revenue", "lag_12_orders", "lag_12_units",
+    "lag_12_available",
 ]
 
 TARGET_COLS = ["Revenue", "Orders", "Units"]
@@ -72,6 +76,7 @@ FEATURE_DISPLAY_NAMES = {
     "lag_12_revenue":       "Lag-12 Revenue (YoY)",
     "lag_12_orders":        "Lag-12 Orders (YoY)",
     "lag_12_units":         "Lag-12 Units (YoY)",
+    "lag_12_available":     "Prior-Year Data Available",
 }
 
 
@@ -130,8 +135,14 @@ def build_features(df):
         g["lag_6_revenue"]  = g["Revenue"].shift(1).rolling(6, min_periods=1).mean()
         g["lag_1_orders"]   = g["Orders"].shift(1)
         g["lag_1_units"]    = g["Units"].shift(1)
-        # Same calendar month in the previous year — fill 0 when unavailable (first 12 months)
-        g["lag_12_revenue"] = g["Revenue"].shift(12).fillna(0)
+        # Same calendar month in the previous year.
+        # With only 24 months of history, months 1-12 have no real prior-year observation.
+        # lag_12_available=1 flags rows where the value is genuine; the RF uses this
+        # to branch between the "no prior history" and "real YoY" regimes without
+        # learning spurious relationships from a literal zero.
+        raw_lag12           = g["Revenue"].shift(12)
+        g["lag_12_available"] = raw_lag12.notna().astype(int)
+        g["lag_12_revenue"] = raw_lag12.fillna(0)
         g["lag_12_orders"]  = g["Orders"].shift(12).fillna(0)
         g["lag_12_units"]   = g["Units"].shift(12).fillna(0)
         return g
@@ -348,13 +359,15 @@ def evaluate_rf(df_model, feature_cols=None, verbose=True):
     return _compute_metrics(all_actuals, all_preds)
 
 
-def retrain_rf_full(df_model):
+def retrain_rf_full(df_model, feature_cols=None):
+    if feature_cols is None:
+        feature_cols = FEATURE_COLS
     model = MultiOutputRegressor(
         RandomForestRegressor(n_estimators=200, random_state=42, n_jobs=1),
         n_jobs=1,
     )
     try:
-        model.fit(df_model[FEATURE_COLS], df_model[TARGET_COLS])
+        model.fit(df_model[feature_cols], df_model[TARGET_COLS])
     except Exception:
         print("    ERROR during RF full retrain:")
         traceback.print_exc()
@@ -430,12 +443,18 @@ def _fc_row(store_name, store_id, cat, period, rev, orders, units, generated_at)
     }
 
 
-def generate_forecasts_rf(df, model, store_map, cat_map):
+def generate_forecasts_rf(df, model, store_map, cat_map, feature_cols=None):
+    if feature_cols is None:
+        feature_cols = FEATURE_COLS
+    use_yoy = "lag_12_revenue" in feature_cols
+
     generated_at = datetime.datetime.now()
     anchor       = df["Period"].max()
     months       = _future_months(anchor)
     print(f"    Anchor: {anchor.strftime('%Y-%m')}"
           f"  →  {months[0].strftime('%Y-%m')} to {months[-1].strftime('%Y-%m')}")
+    print(f"    Feature set: {len(feature_cols)} features"
+          f"  (YoY lag features {'included' if use_yoy else 'excluded'})")
 
     store_id_map = df.groupby("StoreName")["StoreId"].first().to_dict()
     combos = (
@@ -471,27 +490,31 @@ def generate_forecasts_rf(df, model, store_map, cat_map):
             lag_1_ord = float(ord_buf[-1])
             lag_1_unt = float(unt_buf[-1])
 
-            # lag_12: same calendar month one year prior — always from actual data
-            # for a 3-month horizon (months +1/+2/+3), this looks back 9–11 months
-            # into the 24-month training window, so it is always available.
-            yr_back = next_period - pd.DateOffset(months=12)
-            yr_row  = group[
-                (group["Period"].dt.year  == yr_back.year) &
-                (group["Period"].dt.month == yr_back.month)
-            ]
-            lag_12_rev = float(yr_row["Revenue"].iloc[0]) if not yr_row.empty else 0.0
-            lag_12_ord = float(yr_row["Orders"].iloc[0])  if not yr_row.empty else 0.0
-            lag_12_unt = float(yr_row["Units"].iloc[0])   if not yr_row.empty else 0.0
-
-            X = pd.DataFrame([[
+            base_row = [
                 y, m, q, store_enc, cat_enc,
                 lag_1_rev, lag_3_rev, lag_6_rev, lag_1_ord, lag_1_unt,
                 1 if m in [11, 12, 1, 6]         else 0,
                 1 if m in [2, 3, 4, 8, 9, 10]    else 0,
                 1 if m in [6, 7, 8]               else 0,
                 1 if m in [12, 1, 2]              else 0,
-                lag_12_rev, lag_12_ord, lag_12_unt,
-            ]], columns=FEATURE_COLS)
+            ]
+
+            if use_yoy:
+                # lag_12: same calendar month one year prior — always from actual data.
+                # For a 3-month horizon (+1/+2/+3) the lookback is 9-11 months into the
+                # 24-month training window, so it is always available.
+                yr_back = next_period - pd.DateOffset(months=12)
+                yr_row  = group[
+                    (group["Period"].dt.year  == yr_back.year) &
+                    (group["Period"].dt.month == yr_back.month)
+                ]
+                lag_12_rev = float(yr_row["Revenue"].iloc[0]) if not yr_row.empty else 0.0
+                lag_12_ord = float(yr_row["Orders"].iloc[0])  if not yr_row.empty else 0.0
+                lag_12_unt = float(yr_row["Units"].iloc[0])   if not yr_row.empty else 0.0
+                base_row += [lag_12_rev, lag_12_ord, lag_12_unt,
+                             1]  # lag_12_available — always 1 for forecast months
+
+            X = pd.DataFrame([base_row], columns=feature_cols)
 
             pred  = model.predict(X)[0]
             rev_f = max(0.0, round(float(pred[0]), 2))
@@ -721,25 +744,32 @@ def main():
     hw_metrics = evaluate_holtwinters(df)
     _print_metrics(hw_metrics)
 
-    print("\n  Random Forest (14 features — baseline, no YoY):")
-    rf_metrics_before = evaluate_rf(df_model, FEATURE_COLS_ORIGINAL, verbose=False)
-    _print_metrics(rf_metrics_before)
+    print("\n  Random Forest (14 features — calendar + momentum, no YoY):")
+    rf_metrics_14 = evaluate_rf(df_model, FEATURE_COLS_ORIGINAL, verbose=False)
+    _print_metrics(rf_metrics_14)
 
-    print("\n  Random Forest (17 features — with lag-12 year-over-year):")
-    rf_metrics = evaluate_rf(df_model)
-    _print_metrics(rf_metrics)
+    print("\n  Random Forest (18 features — YoY lags + availability flag):")
+    rf_metrics_18 = evaluate_rf(df_model)
+    _print_metrics(rf_metrics_18)
 
-    # ── Before / After comparison ────────────────────────────────────────────
-    wmape_before = rf_metrics_before["Revenue"]["mape"]
-    wmape_after  = rf_metrics["Revenue"]["mape"]
-    delta_pp     = wmape_before - wmape_after
-    direction    = "improvement" if delta_pp > 0 else "regression"
-    pct_change   = abs(delta_pp) / wmape_before * 100 if wmape_before > 0 else 0.0
-    print(f"\n    RF before/after (Revenue WMAPE):")
-    print(f"    14 features: {wmape_before:.1f}%")
-    print(f"    17 features: {wmape_after:.1f}%")
-    print(f"    Change:      {'-' if delta_pp > 0 else '+'}{abs(delta_pp):.1f} pp"
-          f"  ({pct_change:.0f}% relative {direction})")
+    # ── Select the better RF configuration ───────────────────────────────────
+    # With only 24 months of history, the lag-12 YoY features may be net
+    # harmful (first 12 months have no real prior-year data). The pipeline
+    # evaluates both and uses whichever achieves lower Revenue WMAPE.
+    wmape_14 = rf_metrics_14["Revenue"]["mape"]
+    wmape_18 = rf_metrics_18["Revenue"]["mape"]
+    if wmape_14 <= wmape_18:
+        rf_metrics      = rf_metrics_14
+        rf_feature_cols = FEATURE_COLS_ORIGINAL
+        rf_label        = "RF-14 (no YoY)"
+    else:
+        rf_metrics      = rf_metrics_18
+        rf_feature_cols = FEATURE_COLS
+        rf_label        = "RF-18 (with YoY)"
+    print(f"\n    RF feature-set comparison (Revenue WMAPE):")
+    print(f"    14 features (no YoY)  : {wmape_14:.1f}%")
+    print(f"    18 features (YoY+flag): {wmape_18:.1f}%")
+    print(f"    Selected for production: {rf_label}")
 
     print("\n[5/8] Comparing models...")
     all_metrics = {
@@ -756,10 +786,10 @@ def main():
     feat_imp     = []
 
     if best_model_name == "Random Forest":
-        final_rf = retrain_rf_full(df_model)
+        final_rf = retrain_rf_full(df_model, rf_feature_cols)
         raw_imp  = final_rf.estimators_[0].feature_importances_
-        feat_imp = sorted(zip(FEATURE_COLS, raw_imp), key=lambda x: x[1], reverse=True)
-        print(f"\n    Top feature importances (Revenue model, {len(FEATURE_COLS)} features):")
+        feat_imp = sorted(zip(rf_feature_cols, raw_imp), key=lambda x: x[1], reverse=True)
+        print(f"\n    Top feature importances (Revenue model, {len(rf_feature_cols)} features):")
         print(f"    {'Feature':<26} {'Importance':>9}")
         print("    " + "─" * 38)
         for feat_name, imp in feat_imp[:10]:
@@ -773,7 +803,9 @@ def main():
     # ── Generate 3-month forecasts using the winning model ─────────────────────
     print(f"\n[7/8] Generating 3-month forecasts ({best_model_name})...")
     if best_model_name == "Random Forest":
-        forecasts, generated_at = generate_forecasts_rf(df, final_rf, store_map, cat_map)
+        forecasts, generated_at = generate_forecasts_rf(
+            df, final_rf, store_map, cat_map, rf_feature_cols
+        )
     elif best_model_name == "Holt-Winters":
         forecasts, generated_at = generate_forecasts_hw(df, hw_full)
     else:
