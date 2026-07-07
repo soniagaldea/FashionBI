@@ -41,7 +41,7 @@ namespace FashionDataAnalysisPlatform.Controllers
             ViewBag.DateRange = dateRange;
             ViewBag.StoreIds  = storeIds ?? new List<int>();
 
-            // ── 1. Raw inventory (no navigation props) ──────────────
+            // 1. Raw inventory (no navigation props)
             var invQuery = _context.Inventories.AsNoTracking();
             if (storeIds != null && storeIds.Count > 0)
                 invQuery = invQuery.Where(i => i.StoreId != null && storeIds.Contains(i.StoreId.Value));
@@ -86,7 +86,7 @@ namespace FashionDataAnalysisPlatform.Controllers
                 return View();
             }
 
-            // ── 2. Batch product lookup ──────────────────────────────
+            // 2. Batch product lookup
             var invProductIds = rawInv.Select(i => i.ProductId).Distinct().ToList();
             var productRaw = await _context.Products.AsNoTracking()
                 .Where(p => invProductIds.Contains(p.ProductId))
@@ -94,7 +94,7 @@ namespace FashionDataAnalysisPlatform.Controllers
                 .ToListAsync();
             var productMap = productRaw.ToDictionary(p => p.ProductId);
 
-            // ── 3. Store names ───────────────────────────────────────
+            // 3. Store names
             var invStoreIds = rawInv.Select(i => i.StoreId)
                 .Where(id => id.HasValue)
                 .Select(id => id!.Value)
@@ -110,7 +110,7 @@ namespace FashionDataAnalysisPlatform.Controllers
             }
             else { storeMap = new Dictionary<int, string>(); }
 
-            // ── 4. Sales in reference period ─────────────────────────
+            // 4. Sales in reference period
             var salesRefQ = _context.Sales.AsNoTracking().AsQueryable();
             if (salesStart.HasValue)
                 salesRefQ = salesRefQ.Where(s => s.SaleDate >= salesStart.Value && s.SaleDate <= today);
@@ -121,7 +121,7 @@ namespace FashionDataAnalysisPlatform.Controllers
                 .Select(s => new { s.ProductId, s.Quantity })
                 .ToListAsync();
 
-            // ── 5. Last sale dates per product (dead stock detection) ─
+            // 5. Last sale dates per product (dead stock detection)
             var lastSalesQ = _context.Sales.AsNoTracking()
                 .Where(s => invProductIds.Contains(s.ProductId));
             if (storeIds != null && storeIds.Count > 0)
@@ -133,7 +133,7 @@ namespace FashionDataAnalysisPlatform.Controllers
                 .ToListAsync();
             var lastSaleDates = lastSalesRaw.ToDictionary(x => x.ProductId, x => x.LastSale);
 
-            // ── KPIs ─────────────────────────────────────────────────
+            // KPIs
             var totalSKUs       = rawInv.Count;
             var unitsOnHand     = rawInv.Sum(i => i.CurrentStock);
             var inventoryValue  = rawInv.Sum(i => {
@@ -149,7 +149,7 @@ namespace FashionDataAnalysisPlatform.Controllers
             var avgWeeklySales  = totalSoldRef / refWeeks;
             var weeksOfCover    = avgWeeklySales > 0 ? unitsOnHand / avgWeeklySales : 0;
 
-            // ── Stock Health ─────────────────────────────────────────
+            // Stock Health
             var sellThroughRate   = (unitsOnHand + totalSoldRef) > 0
                 ? (double)totalSoldRef / (unitsOnHand + totalSoldRef) * 100 : 0;
             var stockToSalesRatio = totalSoldRef > 0
@@ -162,7 +162,7 @@ namespace FashionDataAnalysisPlatform.Controllers
                 return avgWeekly > 0 && i.CurrentStock > avgWeekly * 8;
             });
 
-            // ── Low Stock Alerts ─────────────────────────────────────
+            // Low Stock Alerts
             var lowStockAlerts = rawInv
                 .Where(i => i.CurrentStock <= i.MinimumStockThreshold)
                 .OrderBy(i => i.CurrentStock)
@@ -181,7 +181,7 @@ namespace FashionDataAnalysisPlatform.Controllers
                     };
                 }).ToList();
 
-            // ── Dead Stock ───────────────────────────────────────────
+            // Dead Stock
             var deadStockItems = rawInv
                 .Where(i => i.CurrentStock > 0)
                 .Select(i => {
@@ -203,7 +203,7 @@ namespace FashionDataAnalysisPlatform.Controllers
                 .Take(10)
                 .ToList();
 
-            // ── Inventory Aging ──────────────────────────────────────
+            // Inventory Aging
             var aging = new int[5]; // <30d, 30–60d, 61–90d, 91–180d, >180d
             foreach (var inv in rawInv)
             {
@@ -215,14 +215,14 @@ namespace FashionDataAnalysisPlatform.Controllers
                 else                aging[4]++;
             }
 
-            // ── Reorder Priority ─────────────────────────────────────
+            // Reorder Priority
             var priCritical = rawInv.Count(i => i.CurrentStock == 0);
             var priHigh     = rawInv.Count(i => i.CurrentStock > 0 && i.CurrentStock < i.MinimumStockThreshold);
             var priMedium   = rawInv.Count(i => i.CurrentStock >= i.MinimumStockThreshold
                                              && i.CurrentStock <= i.MinimumStockThreshold * 2);
             var priLow      = rawInv.Count(i => i.CurrentStock > i.MinimumStockThreshold * 2);
 
-            // ── Category Inventory Value ─────────────────────────────
+            // Category Inventory Value
             var catGroups = rawInv
                 .GroupBy(i => productMap.TryGetValue(i.ProductId, out var p) ? (p.Category ?? "Other") : "Other")
                 .Select(g => new {
@@ -236,7 +236,7 @@ namespace FashionDataAnalysisPlatform.Controllers
                 .Take(8)
                 .ToList();
 
-            // ── Smart Insights ────────────────────────────────────────
+            // Smart Insights
             var insights = new List<object>();
 
             if (outOfStockCount > 0)
@@ -293,7 +293,7 @@ namespace FashionDataAnalysisPlatform.Controllers
                 insights.Add(new { tag = "info", icon = "fa-circle-check", title = "Inventory health nominal",
                     body = "No critical inventory issues detected in the selected period." });
 
-            // ── ViewBag bindings ──────────────────────────────────────
+            // ViewBag bindings
             var opts = new JsonSerializerOptions();
 
             ViewBag.TotalSKUs       = totalSKUs;
@@ -308,7 +308,7 @@ namespace FashionDataAnalysisPlatform.Controllers
             ViewBag.InvTurnover       = Math.Round(invTurnover,       2);
             ViewBag.OverstockCount    = overstockCount;
 
-            // ── Prior-period velocity (trend indicators) ─────────────────────
+            // Prior-period velocity (trend indicators)
             double priorSellThrough = 0, priorInvTurnover = 0;
 
             if (salesStart.HasValue)

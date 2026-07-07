@@ -12,13 +12,13 @@ builder.Services.AddControllersWithViews();
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
     {
-        options.LoginPath        = "/Account/Login";
-        options.LogoutPath       = "/Account/Logout";
+        options.LoginPath = "/Account/Login";
+        options.LogoutPath = "/Account/Logout";
         options.AccessDeniedPath = "/Account/Login";
-        options.ExpireTimeSpan   = TimeSpan.FromHours(8);
+        options.ExpireTimeSpan = TimeSpan.FromHours(8);
         options.SlidingExpiration = true;
-        options.Cookie.Name      = "FashionBI.Auth";
-        options.Cookie.HttpOnly  = true;
+        options.Cookie.Name = "FashionBI.Auth";
+        options.Cookie.HttpOnly = true;
         options.Cookie.SecurePolicy = Microsoft.AspNetCore.Http.CookieSecurePolicy.SameAsRequest;
     });
 
@@ -41,7 +41,7 @@ using (var scope = app.Services.CreateScope())
 
     context.Database.EnsureCreated();
 
-    // Ensure forecasting tables exist in databases created before this module was added
+    // Ensure forecasting tables exist in databases created before the forecasting module was added.
     context.Database.ExecuteSqlRaw(@"
         IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='ForecastResults' AND xtype='U')
         CREATE TABLE ForecastResults (
@@ -78,7 +78,7 @@ using (var scope = app.Services.CreateScope())
             GeneratedAt                 DATETIME2     NOT NULL
         )");
 
-    // Add ModelName column to tables created before the multi-model comparison feature
+    // Add ModelName column to tables created before the multi-model comparison feature.
     context.Database.ExecuteSqlRaw(@"
         IF NOT EXISTS (
             SELECT * FROM sys.columns
@@ -93,6 +93,7 @@ using (var scope = app.Services.CreateScope())
         )
         ALTER TABLE ForecastAccuracies ADD ModelName NVARCHAR(50) NULL");
 
+    // Seed the default API connection used by the background synchronisation service.
     if (!context.StoreConnections.Any())
     {
         context.StoreConnections.Add(new StoreConnection
@@ -117,6 +118,6 @@ app.UseAuthorization();
 
 app.MapControllerRoute(
     name: "default",
-    pattern: "{controller=Home}/{action=Index}/{id?}");
+    pattern: "{controller=Dashboard}/{action=Index}/{id?}");
 
 app.Run();

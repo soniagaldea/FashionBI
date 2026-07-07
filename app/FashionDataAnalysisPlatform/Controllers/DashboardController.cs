@@ -1,4 +1,4 @@
-using FashionDataAnalysisPlatform.Data;
+﻿using FashionDataAnalysisPlatform.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -30,7 +30,7 @@ namespace FashionDataAnalysisPlatform.Controllers
             ViewBag.SelectedStoreIds = storeIds;
             ViewBag.DateRange        = dateRange;
 
-            // ── Date cut-off ───────────────────────────────────────────────
+            // Date cut-off
             DateTime? cutoff = dateRange switch
             {
                 "7d"  => DateTime.Today.AddDays(-7),
@@ -40,7 +40,7 @@ namespace FashionDataAnalysisPlatform.Controllers
                 _     => null
             };
 
-            // ── Base sales query ───────────────────────────────────────────
+            // Base sales query
             var salesQuery = _context.Sales
                 .AsNoTracking()
                 .Include(s => s.Store)
@@ -54,7 +54,7 @@ namespace FashionDataAnalysisPlatform.Controllers
             if (cutoff.HasValue)
                 salesQuery = salesQuery.Where(s => s.SaleDate >= cutoff.Value);
 
-            // ── KPIs ───────────────────────────────────────────────────────
+            // KPIs
             var totalRevenue  = await salesQuery.SumAsync(s => (decimal?)s.Revenue) ?? 0;
             var totalUnits    = await salesQuery.SumAsync(s => (int?)s.Quantity)    ?? 0;
             var grossProfit   = await salesQuery.SumAsync(s => (decimal?)s.Profit)  ?? 0;
@@ -92,7 +92,7 @@ namespace FashionDataAnalysisPlatform.Controllers
             ViewBag.TopCategory       = topCategory?.Category ?? "N/A";
             ViewBag.LowStockCount     = lowStockCount;
 
-            // ── Prior-period KPIs (trend indicators) ───────────────────────
+            // Prior-period KPIs (trend indicators)
             decimal priorRevenue = 0, priorProfit = 0;
             int     priorOrders  = 0, priorUnits  = 0;
 
@@ -124,7 +124,7 @@ namespace FashionDataAnalysisPlatform.Controllers
             ViewBag.PriorAov     = priorOrders > 0 ? priorRevenue / priorOrders : 0m;
             ViewBag.PriorMargin  = priorRevenue > 0 ? priorProfit / priorRevenue * 100 : 0m;
 
-            // ── Revenue trend — granularity adapts to selected date range ──
+            // Revenue trend — granularity adapts to selected date range
             string[]  trendLabels;
             decimal[] trendRevenue;
             decimal[] trendProfit;
@@ -207,7 +207,7 @@ namespace FashionDataAnalysisPlatform.Controllers
             ViewBag.TrendProfit       = JsonSerializer.Serialize(trendProfit);
             ViewBag.TrendGranularity  = trendGranularity;
 
-            // ── Revenue + profit by category ───────────────────────────────
+            // Revenue + profit by category
             var catRaw = await salesQuery
                 .Where(s => s.Product != null)
                 .GroupBy(s => s.Product!.Category)
@@ -228,7 +228,7 @@ namespace FashionDataAnalysisPlatform.Controllers
             ViewBag.CategoryProfit  = JsonSerializer.Serialize(
                 catRaw.Select(x => Math.Round(x.Profit,  2)).ToArray());
 
-            // ── Sales channel distribution ─────────────────────────────────
+            // Sales channel distribution
             var chanRaw = await salesQuery
                 .Where(s => !string.IsNullOrEmpty(s.SalesChannel))
                 .GroupBy(s => s.SalesChannel!)
@@ -245,7 +245,7 @@ namespace FashionDataAnalysisPlatform.Controllers
             ViewBag.ChannelRevenue = JsonSerializer.Serialize(
                 chanRaw.Select(x => Math.Round(x.Revenue, 2)).ToArray());
 
-            // ── Top 5 products by revenue ──────────────────────────────────
+            // Top 5 products by revenue
             var topProductsRaw = await salesQuery
                 .Where(s => s.Product != null)
                 .GroupBy(s => new { s.Product!.ProductName, s.Product!.Category })

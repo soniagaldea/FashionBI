@@ -20,10 +20,10 @@ namespace FashionDataAnalysisPlatform.Services
             _logger = logger;
         }
 
-        // ── Trigger Python ML script ──────────────────────────────────────────
+        // Trigger Python ML script 
         public async Task<(bool Success, string Message)> TriggerRefreshAsync()
         {
-            var mlDir      = Path.GetFullPath(Path.Combine(_env.ContentRootPath, "..", "..", "ml"));
+            var mlDir = Path.GetFullPath(Path.Combine(_env.ContentRootPath, "..", "..", "ml"));
             var scriptPath = Path.Combine(mlDir, "fashion_forecaster.py");
 
             if (!File.Exists(scriptPath))
@@ -81,7 +81,7 @@ namespace FashionDataAnalysisPlatform.Services
             }
         }
 
-        // ── Build the full ViewModel ──────────────────────────────────────────
+        // Build the full ViewModel
         public async Task<ForecastingViewModel> BuildViewModelAsync(string? storeName, string? category)
         {
             storeName = string.IsNullOrWhiteSpace(storeName) ? null : storeName;
@@ -114,7 +114,7 @@ namespace FashionDataAnalysisPlatform.Services
             if (storeName != null) forecastQuery = forecastQuery.Where(f => f.StoreName == storeName);
             if (category  != null) forecastQuery = forecastQuery.Where(f => f.Category  == category);
 
-            // ── Forecast dates ───────────────────────────────────────────────
+            // Forecast dates 
             var rawMonths = await forecastQuery
                 .Select(f => new { f.ForecastMonth.Year, f.ForecastMonth.Month })
                 .Distinct().OrderBy(m => m.Year).ThenBy(m => m.Month).Take(3).ToListAsync();
@@ -136,7 +136,7 @@ namespace FashionDataAnalysisPlatform.Services
             vm.NextMonthUnits        = nextMonthAgg?.Units   ?? 0;
             vm.NextThreeMonthRevenue = await forecastQuery.SumAsync(f => (decimal?)f.RevenueForecast) ?? 0m;
 
-            // ── Accuracy ─────────────────────────────────────────────────────
+            // Accuracy 
             var latestAccAt = await _context.ForecastAccuracies.AsNoTracking().MaxAsync(a => (DateTime?)a.GeneratedAt);
             var allAccRows  = latestAccAt.HasValue
                 ? await _context.ForecastAccuracies.AsNoTracking().Where(a => a.GeneratedAt == latestAccAt.Value).ToListAsync()
@@ -173,17 +173,17 @@ namespace FashionDataAnalysisPlatform.Services
                     IsSelected      = a.ModelName == vm.SelectedModel
                 }).ToList();
 
-            // ── YoY ──────────────────────────────────────────────────────────
+            // YoY 
             await BuildYoYAsync(vm, forecastDates, storeName, category);
 
-            // ── Chart data ───────────────────────────────────────────────────
+            // Chart data 
             BuildActualVsForecastLabels(vm, forecastDates);
             await FillActualVsForecastAsync(vm, forecastQuery, forecastDates, storeName, category);
 
-            // ── Growth charts ─────────────────────────────────────────────────
+            // Growth charts 
             await BuildGrowthChartsAsync(vm, forecastQuery, storeName, category);
 
-            // ── Feature Importance + Driver Groups ───────────────────────────
+            // Feature Importance + Driver Groups 
             var importances = await _context.ForecastFeatureImportances
                 .AsNoTracking().Where(f => f.Target == "Revenue")
                 .OrderByDescending(f => f.Importance).Take(14).ToListAsync();
@@ -193,28 +193,28 @@ namespace FashionDataAnalysisPlatform.Services
             BuildFeatureInterpretation(vm, importances);
             BuildDriverGroups(vm, importances);
 
-            // ── 3-month rows ──────────────────────────────────────────────────
+            // 3-month rows 
             await BuildForecastMonthRowsAsync(vm, forecastQuery, forecastDates, storeName, category);
 
-            // ── Inventory alerts ──────────────────────────────────────────────
+            // Inventory alerts 
             await BuildInventoryAlertsAsync(vm, forecastQuery, storeName, category);
 
-            // ── Revenue change ────────────────────────────────────────────────
+            // Revenue change 
             await BuildRevenueChangeAsync(vm, forecastQuery, storeName, category, forecastDates);
 
-            // ── Track record ──────────────────────────────────────────────────
+            // Track record 
             await BuildTrackRecordAsync(vm);
 
-            // ── Strategic Outlook ─────────────────────────────────────────────
+            // Strategic Outlook 
             await BuildStrategicOutlookAsync(vm, forecastQuery, storeName, category, next);
 
-            // ── Dynamic subtitle (needs all data above) ────────────────────────
+            // Dynamic subtitle (needs all data above) 
             BuildDynamicSubtitle(vm);
 
             return vm;
         }
 
-        // ── Chart labels ─────────────────────────────────────────────────────
+        // Chart labels 
         private static void BuildActualVsForecastLabels(ForecastingViewModel vm, List<DateTime> forecastDates)
         {
             var labels = new List<string>();
@@ -224,7 +224,7 @@ namespace FashionDataAnalysisPlatform.Services
             vm.AllLabelsJson = JsonSerializer.Serialize(labels.ToArray());
         }
 
-        // ── Actual vs Forecast + Confidence Bands ────────────────────────────
+        // Actual vs Forecast + Confidence Bands
         private async Task FillActualVsForecastAsync(
             ForecastingViewModel vm,
             IQueryable<ForecastResult> forecastQuery,
@@ -279,7 +279,7 @@ namespace FashionDataAnalysisPlatform.Services
             vm.LowerBoundDatasetJson = JsonSerializer.Serialize(lowerBound);
         }
 
-        // ── YoY ──────────────────────────────────────────────────────────────
+        // YoY 
         private async Task BuildYoYAsync(
             ForecastingViewModel vm, List<DateTime> forecastDates,
             string? storeName, string? category)
@@ -328,7 +328,7 @@ namespace FashionDataAnalysisPlatform.Services
                 vm.YoYThreeMonthRevenuePct = Math.Round(vm.YoYThreeMonthRevenueDelta / vm.SameThreeMonthsLastYearRevenue * 100m, 1);
         }
 
-        // ── Growth Charts (% change vs prior 3 months) ────────────────────────
+        // Growth Charts (% change vs prior 3 months) 
         private async Task BuildGrowthChartsAsync(
             ForecastingViewModel vm, IQueryable<ForecastResult> forecastQuery,
             string? storeName, string? category)
@@ -396,7 +396,7 @@ namespace FashionDataAnalysisPlatform.Services
             vm.StoreGrowthValuesJson  = JsonSerializer.Serialize(storeGrowth.Select(x => x.GrowthPct).ToArray());
         }
 
-        // ── 3-month Forecast Rows ────────────────────────────────────────────
+        // 3-month Forecast Rows
         private async Task BuildForecastMonthRowsAsync(
             ForecastingViewModel vm, IQueryable<ForecastResult> forecastQuery,
             List<DateTime> forecastDates, string? storeName, string? category)
@@ -439,7 +439,7 @@ namespace FashionDataAnalysisPlatform.Services
             }
         }
 
-        // ── Inventory Alerts + Revenue at Risk ───────────────────────────────
+        // Inventory Alerts + Revenue at Risk 
         private async Task BuildInventoryAlertsAsync(
             ForecastingViewModel vm, IQueryable<ForecastResult> forecastQuery,
             string? storeName, string? category)
@@ -486,7 +486,7 @@ namespace FashionDataAnalysisPlatform.Services
             vm.TotalRevenueAtRisk = vm.InventoryAlerts.Sum(a => a.RevenueAtRisk);
         }
 
-        // ── Revenue change % ─────────────────────────────────────────────────
+        // Revenue change %
         private async Task BuildRevenueChangeAsync(
             ForecastingViewModel vm, IQueryable<ForecastResult> forecastQuery,
             string? storeName, string? category, List<DateTime> forecastDates)
@@ -505,7 +505,7 @@ namespace FashionDataAnalysisPlatform.Services
                     (vm.NextThreeMonthRevenue - vm.PreviousThreeMonthRevenue) / vm.PreviousThreeMonthRevenue * 100m, 1);
         }
 
-        // ── Forecast Track Record ────────────────────────────────────────────
+        // Forecast Track Record
         private async Task BuildTrackRecordAsync(ForecastingViewModel vm)
         {
             var runDates = await _context.ForecastAccuracies.AsNoTracking()
@@ -530,7 +530,7 @@ namespace FashionDataAnalysisPlatform.Services
             }
         }
 
-        // ── Driver Groups (business-language grouping of feature importances) ─
+        // Driver Groups (business-language grouping of feature importances) 
         private static void BuildDriverGroups(ForecastingViewModel vm, List<ForecastFeatureImportance> importances)
         {
             if (!importances.Any()) return;
@@ -584,7 +584,7 @@ namespace FashionDataAnalysisPlatform.Services
                 }).ToList();
         }
 
-        // ── Feature Interpretation text ──────────────────────────────────────
+        // Feature Interpretation text
         private static void BuildFeatureInterpretation(ForecastingViewModel vm, List<ForecastFeatureImportance> importances)
         {
             if (!importances.Any()) { vm.FeatureInterpretation = string.Empty; return; }
@@ -631,7 +631,7 @@ namespace FashionDataAnalysisPlatform.Services
             vm.FeatureInterpretation = sb.ToString();
         }
 
-        // ── Strategic Outlook ────────────────────────────────────────────────
+        // Strategic Outlook
         private async Task BuildStrategicOutlookAsync(
             ForecastingViewModel vm, IQueryable<ForecastResult> forecastQuery,
             string? storeName, string? category, DateTime nextForecastDate)
@@ -802,7 +802,7 @@ namespace FashionDataAnalysisPlatform.Services
                 .Take(6).ToList();
         }
 
-        // ── Dynamic Subtitle ─────────────────────────────────────────────────
+        // Dynamic Subtitle 
         private static void BuildDynamicSubtitle(ForecastingViewModel vm)
         {
             var parts = new List<string>();

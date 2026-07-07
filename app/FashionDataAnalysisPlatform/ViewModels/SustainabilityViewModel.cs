@@ -1,4 +1,4 @@
-namespace FashionDataAnalysisPlatform.ViewModels
+﻿namespace FashionDataAnalysisPlatform.ViewModels
 {
     public class SustainabilityViewModel
     {
@@ -6,30 +6,30 @@ namespace FashionDataAnalysisPlatform.ViewModels
         public bool     HasData          { get; set; }
         public string   CollectionSummary { get; set; } = string.Empty;
 
-        // ── Top KPI Row ────────────────────────────────────────────────────
+        // Top KPI Row
         public decimal AvgSellThroughRate       { get; set; }   // %
         public decimal AtRiskInventoryValue     { get; set; }   // €  seasonal, low-STR
         public int     DeadStockCount           { get; set; }   // SKUs with zero velocity ≥ 45 days
         public decimal MarkdownDependencyRate   { get; set; }   // % units sold at ≥20% discount
         public decimal SeasonalOverstockValue   { get; set; }   // € remaining in expired seasons
 
-        // ── Section 2: Season Timeline ─────────────────────────────────────
+        // Section 2: Season Timeline
         public List<SeasonSummary> Seasons { get; set; } = new();
 
-        // ── Section 3: Waste Risk Matrix (bubble data) ─────────────────────
+        // Section 3: Waste Risk Matrix (bubble data)
         // Each entry = one Category×Season combination
         public List<WasteRiskPoint> WasteRiskPoints { get; set; } = new();
 
-        // ── Section 4: Sell-Through by Category ───────────────────────────
+        // Section 4: Sell-Through by Category
         public List<CategorySellThrough> CategorySellThroughs { get; set; } = new();
 
-        // ── Section 5: Markdown Dependency by Category ────────────────────
+        // Section 5: Markdown Dependency by Category
         public List<CategoryMarkdown> CategoryMarkdowns { get; set; } = new();
 
-        // ── Section 6: At-Risk SKU Table ──────────────────────────────────
+        // Section 6: At-Risk SKU Table
         public List<SkuRiskEntry> AtRiskSkus { get; set; } = new();
 
-        // ── Section 7: Recommendations ────────────────────────────────────
+        // Section 7: Recommendations
         public List<SustainabilityRecommendation> ActNowRecs     { get; set; } = new();
         public List<SustainabilityRecommendation> MonitorRecs    { get; set; } = new();
         public List<SustainabilityRecommendation> PlanBetterRecs { get; set; } = new();
@@ -38,7 +38,7 @@ namespace FashionDataAnalysisPlatform.ViewModels
             ActNowRecs.Count + MonitorRecs.Count + PlanBetterRecs.Count;
     }
 
-    // ── Season summary (timeline section) ─────────────────────────────────
+    // Season summary (timeline section)
     public class SeasonSummary
     {
         public string  SeasonName        { get; set; } = string.Empty;
@@ -53,7 +53,7 @@ namespace FashionDataAnalysisPlatform.ViewModels
         public string  StatusColor       { get; set; } = string.Empty;  // emerald / amber / red / slate
     }
 
-    // ── Waste risk matrix point ────────────────────────────────────────────
+    // Waste risk matrix point
     public class WasteRiskPoint
     {
         public string  Label             { get; set; } = string.Empty;  // "Category — Season"
@@ -66,7 +66,7 @@ namespace FashionDataAnalysisPlatform.ViewModels
         public string  RiskColor         { get; set; } = string.Empty;  // green / amber / red
     }
 
-    // ── Category sell-through ──────────────────────────────────────────────
+    // Category sell-through
     public class CategorySellThrough
     {
         public string  Category        { get; set; } = string.Empty;
@@ -76,7 +76,7 @@ namespace FashionDataAnalysisPlatform.ViewModels
         public string  StatusColor     { get; set; } = string.Empty;
     }
 
-    // ── Markdown dependency by category ───────────────────────────────────
+    // Markdown dependency by category
     public class CategoryMarkdown
     {
         public string  Category             { get; set; } = string.Empty;
@@ -88,7 +88,7 @@ namespace FashionDataAnalysisPlatform.ViewModels
         public string  StatusColor          { get; set; } = string.Empty;
     }
 
-    // ── At-risk SKU row ───────────────────────────────────────────────────
+    // At-risk SKU row
     public class SkuRiskEntry
     {
         public string  ProductName         { get; set; } = string.Empty;
@@ -106,7 +106,7 @@ namespace FashionDataAnalysisPlatform.ViewModels
         public bool    IsDeadStock         { get; set; }
     }
 
-    // ── Sustainability recommendation ─────────────────────────────────────
+    // Sustainability recommendation
     public class SustainabilityRecommendation
     {
         public string  Group            { get; set; } = string.Empty;  // ActNow / Monitor / PlanBetter

@@ -58,7 +58,7 @@ namespace FashionDataAnalysisPlatform.Services
             return notifications;
         }
 
-        // ── SOURCE 1 & 2: Inventory ────────────────────────────────────────────
+        // SOURCE 1 & 2: Inventory
         private async Task AddInventoryNotifications(List<AppNotification> list)
         {
             // 1a. Out-of-stock products — shown unconditionally (no recent-sales filter).
@@ -155,7 +155,7 @@ namespace FashionDataAnalysisPlatform.Services
             }
         }
 
-        // ── SOURCE 3: Smart Insights — revenue trend anomaly ──────────────────
+        // SOURCE 3: Smart Insights — revenue trend anomaly
         private async Task AddSmartInsightsNotifications(List<AppNotification> list)
         {
             // Compare revenue per category: last 30 days vs the prior 30 days.
@@ -229,7 +229,7 @@ namespace FashionDataAnalysisPlatform.Services
             }
         }
 
-        // ── SOURCE 4 & 5: Forecasting ──────────────────────────────────────────
+        // SOURCE 4 & 5: Forecasting 
         private async Task AddForecastingNotifications(List<AppNotification> list)
         {
             // 4a. Forecast confidence warning
@@ -314,7 +314,7 @@ namespace FashionDataAnalysisPlatform.Services
             }
         }
 
-        // ── SOURCE 6 & 7: Sustainability ───────────────────────────────────────
+        // SOURCE 6 & 7: Sustainability
         private async Task AddSustainabilityNotifications(List<AppNotification> list)
         {
             var today           = DateTime.Today;

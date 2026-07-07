@@ -1,4 +1,4 @@
-namespace FashionDataAnalysisPlatform.ViewModels
+﻿namespace FashionDataAnalysisPlatform.ViewModels
 {
     public class SmartInsightsViewModel
     {
@@ -6,7 +6,7 @@ namespace FashionDataAnalysisPlatform.ViewModels
         public bool     HasSalesData    { get; set; }
         public bool     HasForecastData { get; set; }
 
-        // ── Section 1: Business Health Score ────────────────────────────
+        // Section 1: Business Health Score
         public int    HealthScore       { get; set; }
         public string HealthStatus      { get; set; } = string.Empty;
         public string HealthColorClass  { get; set; } = string.Empty;
@@ -27,7 +27,7 @@ namespace FashionDataAnalysisPlatform.ViewModels
         public string InventoryScoreDetail     { get; set; } = string.Empty;
         public string ForecastScoreDetail      { get; set; } = string.Empty;
 
-        // ── Section 2: Strategic Action Board ───────────────────────────
+        // Section 2: Strategic Action Board
         public List<StrategicAction> UrgentActions      { get; set; } = new();
         public List<StrategicAction> OpportunityActions { get; set; } = new();
         public List<StrategicAction> OptimizeActions    { get; set; } = new();
@@ -37,15 +37,15 @@ namespace FashionDataAnalysisPlatform.ViewModels
             UrgentActions.Count + OpportunityActions.Count +
             OptimizeActions.Count + MonitorActions.Count;
 
-        // ── Financial impact aggregates (from Action Board) ──────────────
+        // Financial impact aggregates (from Action Board)
         public decimal TotalRevenueAtRisk     { get; set; }
         public decimal TotalRevenueUpside     { get; set; }
         public decimal TotalOverstockRecovery { get; set; }
 
-        // ── Section 3: KPI Exception Detection ──────────────────────────
+        // Section 3: KPI Exception Detection
         public List<KpiException> Exceptions { get; set; } = new();
 
-        // ── Section 4: ABC/XYZ Portfolio Matrix ──────────────────────────
+        // Section 4: ABC/XYZ Portfolio Matrix
         public Dictionary<string, AbcXyzCell> Matrix          { get; set; } = new();
         public int     TotalProductCount     { get; set; }
         public decimal TotalPortfolioRevenue { get; set; }

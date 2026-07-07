@@ -1,4 +1,4 @@
-using FashionDataAnalysisPlatform.Data;
+﻿using FashionDataAnalysisPlatform.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -33,14 +33,14 @@ namespace FashionDataAnalysisPlatform.Controllers
             var term = q.Trim();
             var results = new List<object>();
 
-            // ── Pages (hardcoded, always first) ──────────────────────────────
+            // Pages (hardcoded, always first)
             foreach (var (name, secondary, url) in Pages)
             {
                 if (name.Contains(term, StringComparison.OrdinalIgnoreCase))
                     results.Add(new { name, type = "Page", secondary, url });
             }
 
-            // ── Stores ───────────────────────────────────────────────────────
+            // Stores
             var stores = await _context.Stores
                 .AsNoTracking()
                 .Where(s => s.StoreName.Contains(term))
@@ -60,7 +60,7 @@ namespace FashionDataAnalysisPlatform.Controllers
                 });
             }
 
-            // ── Categories ───────────────────────────────────────────────────
+            // Categories
             var categories = await _context.Products
                 .AsNoTracking()
                 .Where(p => p.Category.Contains(term))
@@ -72,7 +72,7 @@ namespace FashionDataAnalysisPlatform.Controllers
             foreach (var cat in categories)
                 results.Add(new { name = cat, type = "Category", secondary = "Browse in Sales Analytics", url = "/Sales" });
 
-            // ── Products (by name) ───────────────────────────────────────────
+            // Products (by name)
             var products = await _context.Products
                 .AsNoTracking()
                 .Where(p => p.ProductName.Contains(term))
@@ -88,7 +88,7 @@ namespace FashionDataAnalysisPlatform.Controllers
                     url       = "/Inventories"
                 });
 
-            // ── SKUs (ProductCode match, not already surfaced as a product name match) ──
+            // SKUs (ProductCode match, not already surfaced as a product name match)
             var skus = await _context.Products
                 .AsNoTracking()
                 .Where(p => p.ProductCode.Contains(term) && !p.ProductName.Contains(term))

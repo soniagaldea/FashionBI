@@ -22,17 +22,18 @@ namespace FashionDataAnalysisPlatform.Services
             IConfiguration configuration,
             IHttpClientFactory httpClientFactory)
         {
-            _serviceProvider   = serviceProvider;
-            _logger            = logger;
-            _configuration     = configuration;
+            _serviceProvider = serviceProvider;
+            _logger = logger;
+            _configuration = configuration;
             _httpClientFactory = httpClientFactory;
         }
 
+        // Main background loop: runs sync every 5 seconds until the application stops.
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             if (!_configuration.GetValue<bool>("StoreSync:Enabled", defaultValue: true))
             {
-                _logger.LogInformation("StoreSync disabled via StoreSync:Enabled = false — background sync will not run.");
+                _logger.LogInformation("StoreSync disabled via StoreSync:Enabled = false => background sync will not run.");
                 return;
             }
 
@@ -66,11 +67,12 @@ namespace FashionDataAnalysisPlatform.Services
             _logger.LogInformation("StoreSyncBackgroundService stopped.");
         }
 
+        // Synchronises all active store connections using a fresh scoped DbContext.
         private async Task SyncAllConnectionsAsync(CancellationToken stoppingToken)
         {
             using var scope = _serviceProvider.CreateScope();
-            var context     = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            var http        = _httpClientFactory.CreateClient(HttpClientName);
+            var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var http = _httpClientFactory.CreateClient(HttpClientName);
 
             var connections = await context.StoreConnections
                 .Where(c => c.IsActive)
@@ -99,14 +101,14 @@ namespace FashionDataAnalysisPlatform.Services
                 }
                 catch (TaskCanceledException) when (!stoppingToken.IsCancellationRequested)
                 {
-                    // HttpClient.Timeout (10 s) fired — not a host shutdown
+                    // Request timed out, but the application is still running.
                     _logger.LogWarning(
                         "[{Connection}] Sync skipped — request timed out after 10 s. API may be unreachable at {Url}.",
                         connection.StoreName, apiUrl);
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
                 {
-                    throw; // Host is shutting down — propagate to exit the loop cleanly
+                    throw; // Application is shutting down; exit the loop cleanly.
                 }
                 catch (Exception ex)
                 {
@@ -117,6 +119,7 @@ namespace FashionDataAnalysisPlatform.Services
             }
         }
 
+        // Synchronises one store connection in the required order: stores, products, inventory, then orders.
         private async Task SyncConnectionAsync(
             AppDbContext context,
             StoreConnection connection,
@@ -131,14 +134,8 @@ namespace FashionDataAnalysisPlatform.Services
             var (ordersDownloaded, salesAdded, missingProducts) =
                 await SyncOrdersAsync(context, connection, apiUrl, http, stoppingToken);
 
-            // Advance the cursor when:
-            //   • sales were inserted (normal progress), OR
-            //   • no orders arrived (nothing to retry), OR
-            //   • orders arrived but every one was a genuine duplicate already in
-            //     the DB (missingProducts == 0) — advancing prevents an infinite
-            //     loop where the same duplicate is re-fetched every 5 s.
-            // Only block advancement when orders arrived AND products are missing
-            // from the local catalogue (products haven't synced yet).
+            // Advance LastSyncAt only when the cycle completed safely.
+            // If products are missing, keep the cursor unchanged so the orders can be retried.
             if (salesAdded > 0 || ordersDownloaded == 0 || missingProducts == 0)
             {
                 connection.LastSyncAt = DateTime.Now;
@@ -357,9 +354,8 @@ namespace FashionDataAnalysisPlatform.Services
             await context.SaveChangesAsync(stoppingToken);
         }
 
-        // Returns (ordersDownloaded, salesAdded, missingProducts) so the caller can
-        // decide whether to advance LastSyncAt. missingProducts > 0 means local
-        // products haven't synced yet — block cursor advancement so we retry.
+        // Fetches orders incrementally and transforms each order item into a Sales fact row.
+        // Returns sync counters used to decide whether LastSyncAt can be advanced.
         private async Task<(int ordersDownloaded, int salesAdded, int missingProducts)> SyncOrdersAsync(
             AppDbContext context,
             StoreConnection connection,
@@ -367,7 +363,7 @@ namespace FashionDataAnalysisPlatform.Services
             HttpClient http,
             CancellationToken stoppingToken)
         {
-            // ── 1. Fetch all order pages from the API ─────────────────────────
+            // Fetch all order pages from the API.
             var allOrders  = new List<StoreOrderDto>();
             var page       = 1;
             const int pageSize = 500;
@@ -407,7 +403,7 @@ namespace FashionDataAnalysisPlatform.Services
 
             if (allOrders.Count == 0) return (0, 0, 0);
 
-            // ── 2. Pre-load lookup tables — one query each, zero N+1 ──────────
+            // Preload stores and products to avoid the N+1 query problem.
 
             var storeMap = await context.Stores
                 .Where(s => s.StoreConnectionId == connection.StoreConnectionId)
@@ -438,8 +434,7 @@ namespace FashionDataAnalysisPlatform.Services
                 "[{Connection}] Lookup tables ready — {Stores} stores, {Products} products",
                 connection.StoreName, storeMap.Count, productMap.Count);
 
-            // Dedup set scoped to the orders we are about to process.
-            // Use int? so Contains() accepts the nullable ExternalOrderId column.
+            // Build the deduplication set for the incoming orders.
             var incomingOrderIds = allOrders.Select(o => (int?)o.OrderId).ToHashSet();
 
             var existingKeys = (await context.Sales
@@ -451,7 +446,7 @@ namespace FashionDataAnalysisPlatform.Services
                 .Select(x => (orderId: x.ExternalOrderId ?? 0, itemId: x.ExternalOrderItemId ?? 0))
                 .ToHashSet();
 
-            // ── 3. Process orders ─────────────────────────────────────────────
+            // Process orders and create Sale rows.
             int addedSales       = 0;
             int skippedNoStore   = 0;
             int skippedNoProd    = 0;
@@ -516,7 +511,7 @@ namespace FashionDataAnalysisPlatform.Services
                     existingKeys.Add(dedupKey);
                     addedSales++;
 
-                    // Flush every 500 records to keep transactions small.
+                    // Save every 500 records to keep transactions small.
                     if (addedSales % 500 == 0)
                     {
                         await context.SaveChangesAsync(stoppingToken);

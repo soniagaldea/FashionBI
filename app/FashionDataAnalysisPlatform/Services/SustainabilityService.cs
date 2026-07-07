@@ -1,4 +1,4 @@
-using FashionDataAnalysisPlatform.Data;
+﻿using FashionDataAnalysisPlatform.Data;
 using FashionDataAnalysisPlatform.ViewModels;
 using Microsoft.EntityFrameworkCore;
 
@@ -9,7 +9,7 @@ namespace FashionDataAnalysisPlatform.Services
         private readonly AppDbContext _context;
         public SustainabilityService(AppDbContext context) => _context = context;
 
-        // ── In-memory projection types ─────────────────────────────────────
+        // In-memory projection types
         private sealed record RProd(
             int ProductId, int? StoreId, string Name, string Code,
             string Category, string? Season, bool IsSeasonal,
@@ -22,7 +22,7 @@ namespace FashionDataAnalysisPlatform.Services
             int ProductId, int? StoreId, DateTime SaleDate,
             int Quantity, decimal? DiscountPercent);
 
-        // ── Season end date lookup ─────────────────────────────────────────
+        // Season end date lookup
         private static readonly Dictionary<string, DateTime> SeasonEnds =
             new(StringComparer.OrdinalIgnoreCase)
             {
@@ -52,7 +52,7 @@ namespace FashionDataAnalysisPlatform.Services
         {
             var vm = new SustainabilityViewModel { LastRefreshedAt = DateTime.Now };
 
-            // ── Products (all — no store filter; season data is global) ────
+            // Products (all — no store filter; season data is global)
             var products = await _context.Products.AsNoTracking()
                 .Select(p => new RProd(p.ProductId, p.StoreId, p.ProductName,
                     p.ProductCode, p.Category, p.Season, p.IsSeasonal,
@@ -61,7 +61,7 @@ namespace FashionDataAnalysisPlatform.Services
 
             if (!products.Any()) return vm;
 
-            // ── Inventories ────────────────────────────────────────────────
+            // Inventories
             var invQuery = _context.Inventories.AsNoTracking()
                 .Where(i => i.StoreId != null);
             if (storeIds.Any())
@@ -72,7 +72,7 @@ namespace FashionDataAnalysisPlatform.Services
                     i.CurrentStock, i.LastRestockDate))
                 .ToListAsync();
 
-            // ── Sales (all time — sustainability needs full history) ────────
+            // Sales (all time — sustainability needs full history)
             var salesQuery = _context.Sales.AsNoTracking()
                 .Where(s => s.StoreId != null);
             if (storeIds.Any())
@@ -83,7 +83,7 @@ namespace FashionDataAnalysisPlatform.Services
                     s.SaleDate, s.Quantity, s.DiscountPercent))
                 .ToListAsync();
 
-            // ── Store name lookup ──────────────────────────────────────────
+            // Store name lookup
             var storeQuery = _context.Stores.AsNoTracking().AsQueryable();
             if (storeIds.Any())
                 storeQuery = storeQuery.Where(s => storeIds.Contains(s.StoreId));
@@ -96,7 +96,7 @@ namespace FashionDataAnalysisPlatform.Services
             var today          = DateTime.Today;
             var deadStockCutoff = today.AddDays(-45);
 
-            // ── Pre-aggregate sales per product ────────────────────────────
+            // Pre-aggregate sales per product
             var soldByProd = sales
                 .GroupBy(s => s.ProductId)
                 .ToDictionary(g => g.Key, g => g.Sum(x => x.Quantity));
@@ -111,14 +111,14 @@ namespace FashionDataAnalysisPlatform.Services
                 .GroupBy(s => s.ProductId)
                 .ToDictionary(g => g.Key, g => g.Sum(x => x.Quantity));
 
-            // ── Inventory per product (sum across stores if all-store view) ─
+            // Inventory per product (sum across stores if all-store view)
             var stockByProd = inventories
                 .GroupBy(i => i.ProductId)
                 .ToDictionary(g => g.Key, g => g.Sum(x => x.Stock));
 
             var prodMap = products.ToDictionary(p => p.ProductId);
 
-            // ── Build per-SKU metrics ──────────────────────────────────────
+            // Build per-SKU metrics
             var skuMetrics = new List<SkuMetric>();
 
             foreach (var inv in inventories)
@@ -150,32 +150,32 @@ namespace FashionDataAnalysisPlatform.Services
                     mdRate, wasteScore, storeName));
             }
 
-            // ── TOP KPI ROW ────────────────────────────────────────────────
+            // TOP KPI ROW
             BuildKpis(vm, skuMetrics, sales, today);
 
-            // ── SECTION 2: Season Timeline ─────────────────────────────────
+            // SECTION 2: Season Timeline
             BuildSeasonTimeline(vm, skuMetrics, today);
             BuildCollectionSummary(vm);
 
-            // ── SECTION 3: Waste Risk Matrix ──────────────────────────────
+            // SECTION 3: Waste Risk Matrix
             BuildWasteRiskMatrix(vm, skuMetrics);
 
-            // ── SECTION 4: Sell-Through by Category ───────────────────────
+            // SECTION 4: Sell-Through by Category
             BuildCategorySellThrough(vm, skuMetrics);
 
-            // ── SECTION 5: Markdown Dependency ────────────────────────────
+            // SECTION 5: Markdown Dependency
             BuildMarkdownDependency(vm, sales, prodMap);
 
-            // ── SECTION 6: At-Risk SKU Table ──────────────────────────────
+            // SECTION 6: At-Risk SKU Table
             BuildSkuTable(vm, skuMetrics);
 
-            // ── SECTION 7: Recommendations ────────────────────────────────
+            // SECTION 7: Recommendations
             BuildRecommendations(vm, skuMetrics, vm.CategoryMarkdowns);
 
             return vm;
         }
 
-        // ── Waste Risk Score: 0–100 ────────────────────────────────────────
+        // Waste Risk Score: 0–100
         // Transparent formula documented in the Methodology modal.
         // STR deficit (50 pts) + Time pressure (30 pts) + Dead stock bonus (20 pts)
         private static int ComputeWasteRiskScore(
@@ -203,9 +203,7 @@ namespace FashionDataAnalysisPlatform.Services
             return score;
         }
 
-        // ════════════════════════════════════════════════════════════════════
         // SECTION: KPIs
-        // ════════════════════════════════════════════════════════════════════
         private static void BuildKpis(
             SustainabilityViewModel vm,
             List<SkuMetric> skuMetrics,
@@ -237,9 +235,7 @@ namespace FashionDataAnalysisPlatform.Services
                 .Sum(s => s.AtRiskValue), 0);
         }
 
-        // ════════════════════════════════════════════════════════════════════
         // SECTION 2: Season Timeline
-        // ════════════════════════════════════════════════════════════════════
         private static void BuildSeasonTimeline(
             SustainabilityViewModel vm,
             List<SkuMetric> skuMetrics,
@@ -306,9 +302,7 @@ namespace FashionDataAnalysisPlatform.Services
             }
         }
 
-        // ════════════════════════════════════════════════════════════════════
         // COLLECTION SUMMARY — one executive sentence
-        // ════════════════════════════════════════════════════════════════════
         private static void BuildCollectionSummary(SustainabilityViewModel vm)
         {
             var active  = vm.Seasons.Where(s => !s.IsCore && s.Status != "Closed")
@@ -356,9 +350,7 @@ namespace FashionDataAnalysisPlatform.Services
                 : "All collections are performing within target sell-through benchmarks.";
         }
 
-        // ════════════════════════════════════════════════════════════════════
         // SECTION 3: Waste Risk Matrix
-        // ════════════════════════════════════════════════════════════════════
         private static void BuildWasteRiskMatrix(
             SustainabilityViewModel vm,
             List<SkuMetric> skuMetrics)
@@ -395,9 +387,7 @@ namespace FashionDataAnalysisPlatform.Services
             vm.WasteRiskPoints = groups;
         }
 
-        // ════════════════════════════════════════════════════════════════════
         // SECTION 4: Category Sell-Through
-        // ════════════════════════════════════════════════════════════════════
         private static void BuildCategorySellThrough(
             SustainabilityViewModel vm,
             List<SkuMetric> skuMetrics)
@@ -424,9 +414,7 @@ namespace FashionDataAnalysisPlatform.Services
             vm.CategorySellThroughs = rows;
         }
 
-        // ════════════════════════════════════════════════════════════════════
         // SECTION 5: Markdown Dependency
-        // ════════════════════════════════════════════════════════════════════
         private static void BuildMarkdownDependency(
             SustainabilityViewModel vm,
             List<RSale> sales,
@@ -468,9 +456,7 @@ namespace FashionDataAnalysisPlatform.Services
             vm.CategoryMarkdowns = rows;
         }
 
-        // ════════════════════════════════════════════════════════════════════
         // SECTION 6: At-Risk SKU Table
-        // ════════════════════════════════════════════════════════════════════
         private static void BuildSkuTable(
             SustainabilityViewModel vm,
             List<SkuMetric> skuMetrics)
@@ -514,9 +500,7 @@ namespace FashionDataAnalysisPlatform.Services
             vm.AtRiskSkus = rows;
         }
 
-        // ════════════════════════════════════════════════════════════════════
         // SECTION 7: Recommendations
-        // ════════════════════════════════════════════════════════════════════
         private static void BuildRecommendations(
             SustainabilityViewModel vm,
             List<SkuMetric> skuMetrics,
@@ -526,7 +510,7 @@ namespace FashionDataAnalysisPlatform.Services
             var monitor    = new List<SustainabilityRecommendation>();
             var planBetter = new List<SustainabilityRecommendation>();
 
-            // ── ACT NOW 1: Critical seasonal waste risk ───────────────────
+            // ACT NOW 1: Critical seasonal waste risk
             var criticalGroups = skuMetrics
                 .Where(s => s.IsSeasonal && s.WasteRiskScore >= 65 && s.DaysToEnd <= 90 && s.DaysToEnd >= 0)
                 .GroupBy(s => (s.SeasonName, s.Category))
@@ -556,7 +540,7 @@ namespace FashionDataAnalysisPlatform.Services
                 });
             }
 
-            // ── ACT NOW 2: Dead stock — single aggregated recommendation ──
+            // ACT NOW 2: Dead stock — single aggregated recommendation
             var allDeadStock = skuMetrics
                 .Where(s => s.IsDeadStock && s.CurrentStock > 0)
                 .ToList();
@@ -586,7 +570,7 @@ namespace FashionDataAnalysisPlatform.Services
                 });
             }
 
-            // ── ACT NOW 3: Expired season stock ───────────────────────────
+            // ACT NOW 3: Expired season stock
             var expiredValue = skuMetrics
                 .Where(s => s.IsSeasonal && s.DaysToEnd < 0 && s.CurrentStock > 0)
                 .ToList();
@@ -611,7 +595,7 @@ namespace FashionDataAnalysisPlatform.Services
                 });
             }
 
-            // ── MONITOR 1: Approaching season risk ────────────────────────
+            // MONITOR 1: Approaching season risk
             var approachingGroups = skuMetrics
                 .Where(s => s.IsSeasonal && s.DaysToEnd > 90 && s.DaysToEnd <= 180
                          && s.SellThroughRate < 65m)
@@ -640,7 +624,7 @@ namespace FashionDataAnalysisPlatform.Services
                 });
             }
 
-            // ── MONITOR 2: High-risk categories with moderate lead time ───
+            // MONITOR 2: High-risk categories with moderate lead time
             var moderateRisk = skuMetrics
                 .Where(s => s.WasteRiskScore >= 40 && s.WasteRiskScore < 65)
                 .GroupBy(s => s.Category)
@@ -666,7 +650,7 @@ namespace FashionDataAnalysisPlatform.Services
                 });
             }
 
-            // ── PLAN BETTER 1: Chronic markdown dependency ────────────────
+            // PLAN BETTER 1: Chronic markdown dependency
             // Capped at 2 to guarantee space for the retrospective rec below.
             var chronicMd = markdowns
                 .Where(m => m.MarkdownDependency >= 50m)
@@ -692,7 +676,7 @@ namespace FashionDataAnalysisPlatform.Services
                 });
             }
 
-            // ── PLAN BETTER 2: Post-season learning retrospective ─────────
+            // PLAN BETTER 2: Post-season learning retrospective
             // Always generated if any season has closed. Covers both
             // underperforming and healthy closed seasons so Plan Better
             // is never empty — demonstrating strategic learning, not just
@@ -742,7 +726,7 @@ namespace FashionDataAnalysisPlatform.Services
                 });
             }
 
-            // ── Fallback: guarantee Plan Better is never empty ────────────
+            // Fallback: guarantee Plan Better is never empty
             if (!planBetter.Any())
             {
                 planBetter.Add(new SustainabilityRecommendation {
@@ -764,7 +748,7 @@ namespace FashionDataAnalysisPlatform.Services
             vm.PlanBetterRecs = planBetter.Take(3).ToList();
         }
 
-        // ── Private record for per-SKU working data ───────────────────────
+        // Private record for per-SKU working data
         private sealed record SkuMetric(
             int ProductId, string ProductName, string ProductCode,
             string Category, string SeasonName, bool IsSeasonal,

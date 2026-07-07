@@ -34,7 +34,7 @@ namespace FashionDataAnalysisPlatform.Controllers
 
             ViewBag.DateRange = dateRange;
 
-            // ── 1. Stores ────────────────────────────────────────────────────
+            // 1. Stores
             var stores = await _context.Stores.AsNoTracking()
                 .OrderBy(s => s.StoreName)
                 .Select(s => new { s.StoreId, s.StoreName, s.City, s.StoreType })
@@ -51,7 +51,7 @@ namespace FashionDataAnalysisPlatform.Controllers
 
             var allStoreIds = stores.Select(s => s.StoreId).ToList();
 
-            // ── 2. Sales in period ────────────────────────────────────────────
+            // 2. Sales in period
             var salesQ = _context.Sales.AsNoTracking()
                 .Where(s => s.StoreId != null && allStoreIds.Contains(s.StoreId.Value) && s.SaleDate <= today);
             if (cutoff.HasValue)
@@ -69,7 +69,7 @@ namespace FashionDataAnalysisPlatform.Controllers
                 })
                 .ToListAsync();
 
-            // ── 2b. Prior-period sales ────────────────────────────────────────
+            // 2b. Prior-period sales
             var priorSalesList = new List<(int StoreId, decimal Revenue, decimal Profit, int? OrderId)>();
             if (cutoff.HasValue)
             {
@@ -89,7 +89,7 @@ namespace FashionDataAnalysisPlatform.Controllers
                 priorSalesList = ps.Select(x => (x.StoreId, x.Revenue, x.Profit, x.OrderId)).ToList();
             }
 
-            // ── 3. Inventory snapshot ─────────────────────────────────────────
+            // 3. Inventory snapshot
             var rawInv = await _context.Inventories.AsNoTracking()
                 .Where(i => i.StoreId != null && allStoreIds.Contains(i.StoreId.Value))
                 .Select(i => new {
@@ -102,7 +102,7 @@ namespace FashionDataAnalysisPlatform.Controllers
                 })
                 .ToListAsync();
 
-            // ── 4. Product prices ─────────────────────────────────────────────
+            // 4. Product prices
             var invProductIds = rawInv.Select(i => i.ProductId).Distinct().ToList();
             var priceList = await _context.Products.AsNoTracking()
                 .Where(p => invProductIds.Contains(p.ProductId))
@@ -110,7 +110,7 @@ namespace FashionDataAnalysisPlatform.Controllers
                 .ToListAsync();
             var priceMap = priceList.ToDictionary(p => p.ProductId, p => p.UnitPrice);
 
-            // ── 5. Last sale dates per (store, product) for dead stock ─────────
+            // 5. Last sale dates per (store, product) for dead stock
             var lastSalesRaw = await _context.Sales.AsNoTracking()
                 .Where(s => s.StoreId != null
                          && allStoreIds.Contains(s.StoreId.Value)
@@ -126,7 +126,7 @@ namespace FashionDataAnalysisPlatform.Controllers
             var lastSaleMap = lastSalesRaw
                 .ToDictionary(x => (x.StoreId, x.ProductId), x => x.LastSale);
 
-            // ── 6. Per-store analytics (all in-memory) ────────────────────────
+            // 6. Per-store analytics (all in-memory)
             var storeDataList = stores.Select(store =>
             {
                 var sid    = store.StoreId;
@@ -145,7 +145,9 @@ namespace FashionDataAnalysisPlatform.Controllers
 
                 // Channel revenue split
                 decimal onlineRev   = sList.Where(s => s.Channel == "Online").Sum(s => s.Revenue);
-                decimal mobileRev   = sList.Where(s => s.Channel == "Mobile").Sum(s => s.Revenue);
+                decimal mobileRev = sList
+                    .Where(s => s.Channel == "Mobile" || s.Channel == "MobileApp")
+                    .Sum(s => s.Revenue);
                 decimal physicalRev = sList.Where(s => s.Channel == "Physical").Sum(s => s.Revenue);
                 decimal chTotal     = onlineRev + mobileRev + physicalRev;
 
@@ -204,7 +206,7 @@ namespace FashionDataAnalysisPlatform.Controllers
                 };
             }).ToList();
 
-            // ── 7. Smart cross-store insights ─────────────────────────────────
+            // 7. Smart cross-store insights
             var insights = new List<object>();
             var active   = storeDataList.Where(s => s.revenue > 0).ToList();
 

@@ -3,6 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace FashionDataAnalysisPlatform.Models
 {
+    // Stores evaluation metrics for each forecasting model and target.
     [Table("ForecastAccuracies")]
     public class ForecastAccuracy
     {

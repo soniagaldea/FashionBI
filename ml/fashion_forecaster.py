@@ -1,7 +1,7 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 FashionBI Demand Forecasting Script
-====================================
+
 Trains three models on last 24 months of Store × Category × Month sales:
   1. Naive Baseline  — persistence (last known value repeated for all 3 months)
   2. Holt-Winters    — exponential smoothing with additive trend + seasonality
@@ -80,9 +80,7 @@ FEATURE_DISPLAY_NAMES = {
 }
 
 
-# ---------------------------------------------------------------------------
 # 1. Config + DB connection
-# ---------------------------------------------------------------------------
 def load_config():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     with open(os.path.join(script_dir, "config.json")) as f:
@@ -93,9 +91,7 @@ def get_connection(config):
     return pyodbc.connect(config["connection_string"], autocommit=False)
 
 
-# ---------------------------------------------------------------------------
 # 2. Fetch aggregated sales data (last 24 months)
-# ---------------------------------------------------------------------------
 def fetch_sales_data(conn):
     cutoff = (pd.Timestamp.today() - pd.DateOffset(months=24)).replace(day=1)
     query = """
@@ -120,9 +116,7 @@ def fetch_sales_data(conn):
     return df
 
 
-# ---------------------------------------------------------------------------
 # 3. Feature engineering (adds Period, lags, calendar flags, ordinal encoding)
-# ---------------------------------------------------------------------------
 def build_features(df):
     df = df.copy()
     df["Period"] = pd.to_datetime({"year": df["Year"], "month": df["Month"], "day": 1})
@@ -169,9 +163,7 @@ def build_features(df):
     return df, store_map, cat_map
 
 
-# ---------------------------------------------------------------------------
 # 4. Shared helpers
-# ---------------------------------------------------------------------------
 def _test_cutoff(df):
     return df["Period"].max() - pd.DateOffset(months=3)
 
@@ -205,9 +197,7 @@ def _print_metrics(metrics):
               f"  WMAPE={m['mape']:5.1f}%  Acc={m['accuracy']:.1f}%")
 
 
-# ---------------------------------------------------------------------------
 # 5a. Naive Baseline — predict all test months = last training actual
-# ---------------------------------------------------------------------------
 def evaluate_naive(df):
     cutoff = _test_cutoff(df)
     all_actuals = {c: [] for c in TARGET_COLS}
@@ -226,9 +216,7 @@ def evaluate_naive(df):
     return _compute_metrics(all_actuals, all_preds)
 
 
-# ---------------------------------------------------------------------------
 # 5b. Holt-Winters — per-series exponential smoothing with fallback chain
-# ---------------------------------------------------------------------------
 def _fit_hw(y, _stats=None):
     """Fit Holt-Winters with additive seasonal → trend-only → SES fallback.
     Optionally accumulates tier counts into the _stats dict for diagnostics."""
@@ -311,9 +299,7 @@ def train_holtwinters_full(df):
     return models
 
 
-# ---------------------------------------------------------------------------
-# 5c. Random Forest — multi-output regressor (n_jobs=1 required on Windows)
-# ---------------------------------------------------------------------------
+# 5c. Random Forest — multi-output regressor
 def evaluate_rf(df_model, feature_cols=None, verbose=True):
     if feature_cols is None:
         feature_cols = FEATURE_COLS
@@ -375,9 +361,7 @@ def retrain_rf_full(df_model, feature_cols=None):
     return model
 
 
-# ---------------------------------------------------------------------------
 # 6. Model comparison — print table, return best model name
-# ---------------------------------------------------------------------------
 def compare_models(all_metrics):
     print(f"\n    {'Model':<22} {'Rev WMAPE':>10} {'Rev Acc%':>9}  "
           f"{'Ord WMAPE':>10} {'Unt WMAPE':>10}")
@@ -404,9 +388,7 @@ def compare_models(all_metrics):
     return best_name
 
 
-# ---------------------------------------------------------------------------
 # 7. Forecast generation — one function per model family
-# ---------------------------------------------------------------------------
 def _lag_buffer_at_anchor(group_df, anchor_period):
     """Build 6-element lag buffer (oldest → newest) ending at anchor_period,
     zero-filling months where this Store+Category had no sales."""
@@ -593,9 +575,7 @@ def generate_forecasts_naive(df):
     return forecasts, generated_at
 
 
-# ---------------------------------------------------------------------------
 # 8. Ensure tables exist — idempotent, adds ModelName to existing tables
-# ---------------------------------------------------------------------------
 def ensure_tables(conn):
     cursor = conn.cursor()
 
@@ -659,9 +639,7 @@ def ensure_tables(conn):
     print("    Tables verified.")
 
 
-# ---------------------------------------------------------------------------
 # 9. Write results to database
-# ---------------------------------------------------------------------------
 def write_results(conn, forecasts, all_metrics, feature_importance, generated_at, best_model_name):
     cursor = conn.cursor()
 
@@ -702,9 +680,7 @@ def write_results(conn, forecasts, all_metrics, feature_importance, generated_at
     cursor.close()
 
 
-# ---------------------------------------------------------------------------
 # Main
-# ---------------------------------------------------------------------------
 def main():
     print("=" * 65)
     print("  FashionBI — Naive / Holt-Winters / Random Forest Comparison")
@@ -730,7 +706,7 @@ def main():
         print("ERROR: Insufficient training data. Each store-category needs 7+ months.")
         sys.exit(1)
 
-    # ── Evaluate all 3 models on the held-out test set (last 3 months) ────────
+    # Evaluate all 3 models on the held-out test set (last 3 months)
     # Naive and HW use df (all rows; no lag-feature requirement).
     # RF uses df_model (lag NaN rows dropped).
     # All share the same test cutoff: df["Period"].max() - 3 months.
@@ -752,7 +728,7 @@ def main():
     rf_metrics_18 = evaluate_rf(df_model)
     _print_metrics(rf_metrics_18)
 
-    # ── Select the better RF configuration ───────────────────────────────────
+    # Select the better RF configuration
     # With only 24 months of history, the lag-12 YoY features may be net
     # harmful (first 12 months have no real prior-year data). The pipeline
     # evaluates both and uses whichever achieves lower Revenue WMAPE.
@@ -779,7 +755,7 @@ def main():
     }
     best_model_name = compare_models(all_metrics)
 
-    # ── Retrain best model on full dataset ─────────────────────────────────────
+    # Retrain best model on full dataset
     print(f"\n[6/8] Retraining {best_model_name} on full dataset...")
     final_rf     = None
     hw_full      = None
@@ -800,7 +776,7 @@ def main():
         hw_full = train_holtwinters_full(df)
     # Naive needs no retraining
 
-    # ── Generate 3-month forecasts using the winning model ─────────────────────
+    # Generate 3-month forecasts using the winning model
     print(f"\n[7/8] Generating 3-month forecasts ({best_model_name})...")
     if best_model_name == "Random Forest":
         forecasts, generated_at = generate_forecasts_rf(

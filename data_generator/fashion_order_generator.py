@@ -1,10 +1,7 @@
 """
-Fashion Retail Data Generation Engine
-=====================================
+Fashion Retail Data Generator
 
-Simulates realistic order history for the FashionBI thesis project.
-
-Simulation window: July 2024 → present (24 months).
+Simulation window: July 2024 → June 2026 (24 months).
 
 Works with FashionStoreAPI:
 - GET  /api/Stores
@@ -45,7 +42,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 API_BASE_URL = "https://localhost:7151"
 
 RANDOM_SEED = 42
-LIVE_INTERVAL_SECONDS = 10
+LIVE_INTERVAL_SECONDS = 15
 
 # Historical simulation starts here (matches Core product LaunchDate in seed).
 HISTORICAL_START = datetime(2024, 7, 1)

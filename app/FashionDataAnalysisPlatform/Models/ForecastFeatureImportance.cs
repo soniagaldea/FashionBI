@@ -3,6 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace FashionDataAnalysisPlatform.Models
 {
+    // Stores feature importance scores produced by the forecasting model.
     [Table("ForecastFeatureImportances")]
     public class ForecastFeatureImportance
     {

@@ -56,6 +56,5 @@ namespace FashionDataAnalysisPlatform.Models
 
         public ICollection<Sale> Sales { get; set; } = new List<Sale>();
         public ICollection<Inventory> Inventories { get; set; } = new List<Inventory>();
-        public ICollection<Prediction> Predictions { get; set; } = new List<Prediction>();
     }
 }

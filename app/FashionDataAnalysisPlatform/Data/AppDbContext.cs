@@ -13,11 +13,9 @@ namespace FashionDataAnalysisPlatform.Data
         public DbSet<Product> Products => Set<Product>();
         public DbSet<Sale> Sales => Set<Sale>();
         public DbSet<Inventory> Inventories => Set<Inventory>();
-        public DbSet<Prediction> Predictions => Set<Prediction>();
         public DbSet<StoreConnection> StoreConnections => Set<StoreConnection>();
         public DbSet<Store> Stores => Set<Store>();
 
-        // Forecasting module
         public DbSet<ForecastResult> ForecastResults => Set<ForecastResult>();
         public DbSet<ForecastAccuracy> ForecastAccuracies => Set<ForecastAccuracy>();
         public DbSet<ForecastFeatureImportance> ForecastFeatureImportances => Set<ForecastFeatureImportance>();
@@ -40,12 +38,6 @@ namespace FashionDataAnalysisPlatform.Data
                 .HasOne(i => i.Product)
                 .WithMany(p => p.Inventories)
                 .HasForeignKey(i => i.ProductId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            modelBuilder.Entity<Prediction>()
-                .HasOne(pr => pr.Product)
-                .WithMany(p => p.Predictions)
-                .HasForeignKey(pr => pr.ProductId)
                 .OnDelete(DeleteBehavior.Cascade);
 
             modelBuilder.Entity<Sale>()

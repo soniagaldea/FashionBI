@@ -31,7 +31,7 @@ namespace FashionDataAnalysisPlatform.Controllers
             ViewBag.SelectedStoreIds = storeIds;
             ViewBag.DateRange        = dateRange;
 
-            // ── Date cut-off ─────────────────────────────────────────────────
+            // Date cut-off
             DateTime? cutoff = dateRange switch
             {
                 "7d"  => DateTime.Today.AddDays(-7),
@@ -41,7 +41,7 @@ namespace FashionDataAnalysisPlatform.Controllers
                 _     => null
             };
 
-            // ── Filtered query — no navigation props, no JOINs ───────────────
+            // Filtered query — no navigation props, no JOINs
             var salesQuery = _context.Sales.AsNoTracking().AsQueryable();
 
             if (storeIds.Any())
@@ -50,7 +50,7 @@ namespace FashionDataAnalysisPlatform.Controllers
             if (cutoff.HasValue)
                 salesQuery = salesQuery.Where(s => s.SaleDate >= cutoff.Value);
 
-            // ── Single in-memory fetch — all analytics computed from this ─────
+            // Single in-memory fetch — all analytics computed from this
             var rawSales = await salesQuery
                 .Select(s => new
                 {
@@ -67,14 +67,14 @@ namespace FashionDataAnalysisPlatform.Controllers
                 })
                 .ToListAsync();
 
-            // ── Batch product lookup (EF Core emits WHERE 1=0 for empty list) ─
+            // Batch product lookup (EF Core emits WHERE 1=0 for empty list)
             var productIds = rawSales.Select(s => s.ProductId).Distinct().ToList();
             var productMap = await _context.Products.AsNoTracking()
                 .Where(p => productIds.Contains(p.ProductId))
                 .Select(p => new { p.ProductId, p.ProductName, p.Category })
                 .ToDictionaryAsync(p => p.ProductId);
 
-            // ── KPIs ──────────────────────────────────────────────────────────
+            // KPIs
             decimal totalRevenue = rawSales.Sum(s => s.Revenue);
             int     totalUnits   = rawSales.Sum(s => s.Quantity);
             decimal grossProfit  = rawSales.Sum(s => s.Profit);
@@ -93,7 +93,7 @@ namespace FashionDataAnalysisPlatform.Controllers
             ViewBag.AverageOrderValue = averageOrderValue;
             ViewBag.ProfitMargin      = profitMargin;
 
-            // ── Prior-period KPIs (trend indicators) ───────────────────────
+            // Prior-period KPIs (trend indicators)
             decimal priorRevenue = 0, priorProfit = 0;
             int     priorOrders  = 0, priorUnits  = 0;
 
@@ -126,7 +126,7 @@ namespace FashionDataAnalysisPlatform.Controllers
             ViewBag.PriorAov     = priorOrders > 0 ? priorRevenue / priorOrders : 0m;
             ViewBag.PriorMargin  = priorRevenue > 0 ? priorProfit / priorRevenue * 100 : 0m;
 
-            // ── Revenue Trend + AOV Trend (one grouping pass, two series) ────
+            // Revenue Trend + AOV Trend (one grouping pass, two series)
             string[]  trendLabels;
             decimal[] trendRevenue;
             decimal[] aovValues;
@@ -193,7 +193,7 @@ namespace FashionDataAnalysisPlatform.Controllers
             ViewBag.AovValues        = JsonSerializer.Serialize(aovValues);
             ViewBag.TrendGranularity = trendGranularity;
 
-            // ── Discount Efficiency by bands (revenue + profit margin per band) ─
+            // Discount Efficiency by bands (revenue + profit margin per band)
             var discBandLabels  = new[] { "0%", "1–10%", "11–20%", "21–30%", "30%+" };
             var discBandCounts  = new int[5];
             var discBandRevenue = new decimal[5];
@@ -217,7 +217,7 @@ namespace FashionDataAnalysisPlatform.Controllers
             ViewBag.DiscountBandRevenue = JsonSerializer.Serialize(discBandRevenue.Select(v => Math.Round(v, 2)).ToArray());
             ViewBag.DiscountBandMargin  = JsonSerializer.Serialize(discBandMargin);
 
-            // ── Top 5 products by revenue ─────────────────────────────────────
+            // Top 5 products by revenue
             var topProductsRaw = rawSales
                 .GroupBy(s => s.ProductId)
                 .Select(g =>
@@ -240,7 +240,7 @@ namespace FashionDataAnalysisPlatform.Controllers
 
             ViewBag.TopProducts = JsonSerializer.Serialize(topProductsRaw);
 
-            // ── Color Performance (top 6 by revenue) ─────────────────────────
+            // Color Performance (top 6 by revenue)
             var colorPerf = rawSales
                 .Where(s => !string.IsNullOrWhiteSpace(s.Color))
                 .GroupBy(s => s.Color!)
@@ -258,7 +258,7 @@ namespace FashionDataAnalysisPlatform.Controllers
             ViewBag.ColorUnits   = JsonSerializer.Serialize(colorPerf.Select(x => x.units).ToArray());
             ViewBag.ColorRevenue = JsonSerializer.Serialize(colorPerf.Select(x => x.revenue).ToArray());
 
-            // ── Size Performance (standard sizes) ────────────────────────────
+            // Size Performance (standard sizes)
             var sizeOrder  = new[] { "XS", "S", "M", "L", "XL", "XXL" };
             var sizeLookup = rawSales
                 .Where(s => !string.IsNullOrWhiteSpace(s.Size))
@@ -272,7 +272,7 @@ namespace FashionDataAnalysisPlatform.Controllers
             ViewBag.SizeLabels = JsonSerializer.Serialize(sizeOrder);
             ViewBag.SizeUnits  = JsonSerializer.Serialize(sizeUnits);
 
-            // ── Channel Split Summary ─────────────────────────────────────────
+            // Channel Split Summary
             var channelSplit = rawSales
                 .Where(s => !string.IsNullOrWhiteSpace(s.Channel))
                 .GroupBy(s => s.Channel!)
@@ -293,7 +293,7 @@ namespace FashionDataAnalysisPlatform.Controllers
 
             ViewBag.ChannelSplit = JsonSerializer.Serialize(channelSplit);
 
-            // ── Category revenue (for insights) ──────────────────────────────
+            // Category revenue (for insights)
             var catRevenue = rawSales
                 .GroupBy(s =>
                 {
@@ -304,7 +304,7 @@ namespace FashionDataAnalysisPlatform.Controllers
                 .OrderByDescending(x => x.Revenue)
                 .ToList();
 
-            // ── Smart Insights ────────────────────────────────────────────────
+            // Smart Insights
             var insights = new List<object>();
 
             // 1. Revenue trend direction: compare first half vs second half of the period

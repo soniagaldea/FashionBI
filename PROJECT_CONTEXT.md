@@ -36,7 +36,7 @@ In the thesis context, the system is operated by a single demo user (the researc
 4. Implement an ABC/XYZ portfolio classification, Statistical Process Control anomaly detection, and a composite Business Health Score within a Smart Insights prescriptive module.
 5. Implement a sustainability intelligence module that quantifies inventory waste risk using sell-through rate, markdown dependency, and dead stock detection.
 6. Demonstrate industry-standard software patterns: MVC architecture, dependency injection, background services, cookie-based authentication, and CSRF protection.
-7. Simulate 18 months of realistic historical fashion retail data using a Python order generator with seasonal weighting, store volume profiles, and basket affinity logic.
+7. Simulate 24 months of realistic historical fashion retail data (July 2024 → June 2026) using a Python order generator with seasonal weighting, store volume profiles, and basket affinity logic.
 
 ---
 
@@ -91,13 +91,13 @@ The following functional requirements were implemented in the final submission:
 
 **FR-03:** The system shall authenticate users via cookie-based session authentication. Only authenticated users shall access analytics pages. A demo login button shall allow thesis evaluation without credential entry.
 
-**FR-04:** The Executive Dashboard shall display total revenue, gross profit, order count, average order value, profit margin, top category, and low-stock count. All KPIs shall include prior-period trend indicators. The revenue trend chart shall adapt granularity (daily/weekly/monthly) based on the selected date range. The dashboard shall refresh via a polling LiveMetrics endpoint every 10 seconds without full page reload.
+**FR-04:** The Executive Dashboard shall display total revenue, gross profit, order count, average order value, profit margin, top category, and low-stock count. All KPIs shall include prior-period trend indicators. The revenue trend chart shall adapt granularity (daily/weekly/monthly) based on the selected date range. The dashboard shall refresh via a polling LiveMetrics endpoint every 15 seconds without full page reload.
 
 **FR-05:** The Sales Analytics module shall display revenue trend, AOV trend, category performance, channel split, top 5 products by revenue, colour performance, size distribution, and discount band efficiency. All charts shall be filterable by store and date range.
 
 **FR-06:** The Inventory Intelligence module shall display total SKU count, units on hand, inventory value, low-stock count, out-of-stock count, weeks of cover, sell-through rate, stock-to-sales ratio, inventory turnover, and overstock count. The module shall include a low-stock alert table, dead stock table (90+ days no sales), inventory aging histogram, and reorder priority classification.
 
-**FR-07:** The Store Comparison module shall provide side-by-side metrics for all active stores including revenue, profit, orders, units, AOV, margin, channel split, inventory value, inventory turnover, low-stock count, OOS count, and dead stock count. Automatically generated cross-store insights shall be displayed.
+**FR-07:** The Store Comparison module shall provide side-by-side metrics for all active stores including revenue, profit, orders, units, AOV, margin, channel split (Online/MobileApp/Physical), inventory value, inventory turnover, low-stock count, OOS count, and dead stock count. Automatically generated cross-store insights shall be displayed. Note: `StoreComparisonController` filters by the string `"Mobile"` for the mobile channel, which does not match the stored value `"MobileApp"` — mobile channel revenue in the Store Comparison view is therefore reported as 0.
 
 **FR-08:** The Forecasting module shall generate 3-month demand forecasts at the Store × Category level. The system shall compare three models (Naive Baseline, Holt-Winters, Random Forest) on a held-out test set and select the best by Revenue WMAPE. Forecasts shall be triggered manually by the user. The module shall display actual vs forecast chart with confidence bands, forecast accuracy metrics (MAE, RMSE, WMAPE, Accuracy%), feature importance chart, inventory risk alerts, year-over-year comparison, and a Strategic Outlook section.
 
@@ -113,14 +113,14 @@ The following functional requirements were implemented in the final submission:
 
 **FR-14:** The system shall use CSRF protection (anti-forgery tokens) on all state-mutating POST actions.
 
-**FR-15:** The data generator (`fashion_order_generator.py`) shall simulate 18 months of historical orders in historical mode and continuous live orders (one order every 10 seconds) in live mode, using seasonal weights, store-specific volume profiles, and basket affinity logic.
+**FR-15:** The data generator (`fashion_order_generator.py`) shall simulate 24 months of historical orders (July 2024 → present) in historical mode and continuous live orders (one order every 10 seconds) in live mode, using seasonal weights, store-specific volume profiles, and basket affinity logic.
 
 ---
 
 ## 4. Non-Functional Requirements
 
 ### Performance
-- All dashboard pages shall load in under 3 seconds for datasets of up to 18 months of simulated order history.
+- All dashboard pages shall load in under 3 seconds for datasets of up to 24 months of simulated order history.
 - The background sync service shall complete each sync cycle within the 5-second polling interval for datasets of up to 10,000 sales records.
 - The ML forecasting script shall complete within the 5-minute timeout configured in `ForecastingService`.
 - Sales data fetch in analytics controllers uses `AsNoTracking()` throughout to avoid EF Core change-tracking overhead on read-only queries.
@@ -231,11 +231,11 @@ The FashionStoreAPI is a minimal ASP.NET Core Web API that owns the transactiona
 - Seeding the database with 3 stores and 100 product records on first startup.
 - Exposing a Swagger UI (`/swagger`) for API exploration.
 
-The API does not implement authentication because it operates on localhost and is considered an internal service. The API uses `EnsureCreated()` for schema management (no migrations in the final submission).
+The API does not implement authentication because it operates on localhost and is considered an internal service. The API schema is managed through EF Core migrations applied via `dotnet ef database update` — two migration files are present (`20260429124414_InitialCreate`, `20260519172005_AddFashionAnalyticsFields`). `Program.cs` does not call `EnsureCreated()` or `Migrate()` explicitly; the database must have the migrations applied before first run.
 
 #### fashion_order_generator.py (Data Generator)
 The Python generator simulates realistic fashion retail demand. It operates in two modes:
-- **Historical mode:** Generates 18 months of backdated orders starting from July 2024, creating the dataset required for ML forecasting. Orders are distributed across seasons, stores, and categories with realistic weighting.
+- **Historical mode:** Generates 24 months of backdated orders starting from July 2024 through the current date (`HISTORICAL_START = datetime(2024, 7, 1)`, `end_date = datetime.now()`), creating the dataset required for ML forecasting. Orders are distributed across seasons, stores, and categories with realistic weighting.
 - **Live mode:** Continuously generates one order every 10 seconds, simulating real-time retail activity for demo purposes.
 
 The generator respects seasonal product lifecycles: it only orders products whose `LaunchDate` has been reached and whose `SEASON_END_DATE` has not passed. It uses store-specific volume profiles (Maison Toulouse has lower volume but higher AOV than Scuffer) and simulates basket affinity (e.g., a customer buying outerwear is more likely to also buy knitwear).
@@ -280,7 +280,7 @@ Each module has a dedicated Razor `.cshtml` view that renders data passed via `V
 **Selection rationale:** C# is the primary implementation language. It provides strong static typing, LINQ for expressive in-memory data transformation, async/await for non-blocking I/O operations (essential for the background sync service and all controller actions), pattern matching, and records (used extensively in service classes as projection types). These language features make it well-suited to complex analytics logic that combines database queries, in-memory aggregation, and business rule application.
 
 ### Entity Framework Core 8
-**Selection rationale:** EF Core is the ORM used to interact with both databases. It was selected for its tight integration with ASP.NET Core (dependency injection, `DbContext` lifetime management), its ability to generate and execute parameterised SQL queries from LINQ expressions, and its change-tracking capability (disabled via `AsNoTracking()` for read operations). The `EnsureCreated()` schema management approach was chosen over migrations because the project is a thesis prototype where database versioning is less critical than simplicity.
+**Selection rationale:** EF Core is the ORM used to interact with both databases. It was selected for its tight integration with ASP.NET Core (dependency injection, `DbContext` lifetime management), its ability to generate and execute parameterised SQL queries from LINQ expressions, and its change-tracking capability (disabled via `AsNoTracking()` for read operations). Schema management differs by component: `FashionStoreAPI` uses EF Core migrations (applied via `dotnet ef database update`); `FashionDataAnalysisPlatform` uses `EnsureCreated()` for the main schema supplemented by raw `IF NOT EXISTS` DDL statements in `Program.cs` for the three forecast tables (which were added after the initial schema was created). Migration files exist in the repository for both projects, but only the API migrations are actively applied; the analytics app's migration files are development artifacts not executed at runtime.
 
 ### SQL Server (LocalDB)
 **Selection rationale:** SQL Server LocalDB was selected as the database engine because it runs in-process without requiring a separate server installation, making it suitable for a thesis demonstration environment. Two separate LocalDB instances are used: `FashionStoreApiDb` for transactional data and `FashionRetailDb` for analytics data. SQL Server's T-SQL dialect supports the `IF NOT EXISTS` DDL pattern used for backwards-compatible table creation and the `OBJECT_ID` function used to check for column existence. The `ODBC Driver 17 for SQL Server` enables the Python ML script to write directly to `FashionRetailDb` via pyodbc.
@@ -327,7 +327,8 @@ Each module has a dedicated Razor `.cshtml` view that renders data passed via `V
 
 #### Order
 - **Purpose:** Represents a customer purchase transaction.
-- **Fields:** `OrderId` (PK), `StoreId` (FK → Store), `OrderDate`, `TotalAmount`, `CustomerId` (nullable, GUID string), `SalesChannel` ("Online", "Mobile", "Physical").
+- **Fields:** `OrderId` (PK), `StoreId` (FK → Store), `OrderDate`, `TotalAmount`, `CustomerId` (nullable, GUID string), `SalesChannel` ("Online", "MobileApp", "Physical").
+- **Note:** The generator stores `"MobileApp"` as the mobile channel identifier (not `"Mobile"`). The three canonical values in the database are `"Online"`, `"MobileApp"`, and `"Physical"`. The `StoreComparisonController` contains a hardcoded filter for `"Mobile"` which does not match the stored value; the mobile channel split in Store Comparison therefore returns 0. This is a known implementation inconsistency.
 - **Relationships:** One-to-many with OrderItem.
 
 #### OrderItem
@@ -357,7 +358,7 @@ Each module has a dedicated Razor `.cshtml` view that renders data passed via `V
 
 #### Sale (fact table)
 - **Purpose:** The core fact table. Each row represents one order item that has been synced from the API. This is the primary data source for all revenue, profit, and volume analytics.
-- **Fields:** `SaleId` (PK), `ProductId` (FK, local), `StoreConnectionId` (FK), `StoreId` (FK, local), `ExternalOrderId` (maps to API `Order.OrderId`), `ExternalOrderItemId` (maps to API `OrderItem.OrderItemId` — deduplication key), `ExternalProductCode`, `SaleDate`, `Quantity`, `UnitPrice`, `Revenue`, `Size`, `Color`, `DiscountPercent`, `TotalCost`, `Profit`, `CustomerId`, `SalesChannel`.
+- **Fields:** `SaleId` (PK), `ProductId` (FK, local), `StoreConnectionId` (FK), `StoreId` (FK, local), `ExternalOrderId` (maps to API `Order.OrderId`), `ExternalOrderItemId` (maps to API `OrderItem.OrderItemId` — deduplication key), `ExternalProductCode`, `SaleDate`, `Quantity`, `UnitPrice`, `Revenue`, `Size`, `Color`, `DiscountPercent`, `TotalCost`, `Profit`, `CustomerId`, `SalesChannel` (actual values: `"Online"`, `"MobileApp"`, `"Physical"`).
 - **Deduplication:** The pair `(StoreConnectionId, ExternalOrderId, ExternalOrderItemId)` is checked before each insert to prevent duplicate sales records.
 
 #### Inventory (analytics)
@@ -366,13 +367,14 @@ Each module has a dedicated Razor `.cshtml` view that renders data passed via `V
 
 #### ForecastResults
 - **Purpose:** Stores the output of each ML forecasting run. All rows are replaced on each new run (DELETE then INSERT).
-- **Fields:** `ForecastResultId` (PK), `StoreId` (nullable int, references local Store), `StoreName`, `Category`, `ForecastMonth` (DATETIME2 — first day of month), `RevenueForecast` (DECIMAL 18,2), `OrdersForecast` (INT), `UnitsForecast` (INT), `GeneratedAt` (timestamp of the run), `ModelName` (name of the winning model).
-- **Created:** Via `IF NOT EXISTS CREATE TABLE` DDL in both `Program.cs` and `ml/fashion_forecaster.py`.
+- **Fields:** `ForecastResultId` (PK), `StoreId` (nullable int, references local Store), `StoreName`, `Category`, `ForecastMonth` (DATETIME2 — first day of month), `RevenueForecast` (DECIMAL 18,2), `OrdersForecast` (INT), `UnitsForecast` (INT), `GeneratedAt` (timestamp of the run), `ModelName` (name of the winning model — `NVARCHAR(50) NULL`).
+- **Created:** Via `IF NOT EXISTS CREATE TABLE` DDL in both `Program.cs` and `ml/fashion_forecaster.py`. The `ModelName` column is absent from the `Program.cs` DDL and is added to the table by `ml/fashion_forecaster.py`'s `ensure_tables()` function via `ALTER TABLE` on the first forecast run.
 
 #### ForecastAccuracies
 - **Purpose:** Stores accuracy metrics for all three models evaluated in each forecasting run. Allows the UI to display a model comparison table.
 - **Fields:** `ForecastAccuracyId` (PK), `ModelName` ("Naive Baseline"/"Holt-Winters"/"Random Forest"), `Target` ("Revenue"/"Orders"/"Units"), `MAE`, `RMSE`, `MAPE`, `AccuracyPercent`, `GeneratedAt`.
 - **Note:** Three rows per Target × three models = 9 rows per run. Previous runs' rows are deleted on each new run.
+- **Schema note:** The `ModelName` column is absent from the C# DDL in `Program.cs`. It is added to the table by `ml/fashion_forecaster.py`'s `ensure_tables()` function via `ALTER TABLE` on the first forecast run. The table does not match the schema described above until after the first forecast generation.
 
 #### ForecastFeatureImportances
 - **Purpose:** Stores feature importance values extracted from the Random Forest Revenue model. Used to render the horizontal bar chart and the feature interpretation text in the Forecasting module.
@@ -446,7 +448,7 @@ DashboardController, SalesController, InventoriesController, StoreComparisonCont
 - `PriorPeriod = same duration immediately preceding the current period`
 - Revenue trend granularity: 7d/30d → daily; 90d → weekly (ISO Monday of each week); 12m/all → monthly.
 
-**Live refresh:** The `LiveMetrics` endpoint returns all KPIs and chart data as JSON. A JavaScript interval (10 seconds) calls this endpoint and updates the DOM without a full page reload, simulating a live dashboard.
+**Live refresh:** The `LiveMetrics` endpoint returns all KPIs and chart data as JSON. A JavaScript interval (15 seconds) calls this endpoint and updates the DOM without a full page reload, simulating a live dashboard.
 
 ---
 
@@ -509,7 +511,7 @@ DashboardController, SalesController, InventoriesController, StoreComparisonCont
 **Inputs:** Date range selector. No store filter (shows all stores by design).
 
 **Outputs:**
-- Per-store metric cards: Revenue, Profit, Orders, Units, AOV, Margin, Channel split (Online%/Mobile%/Physical%), Inventory Value, Inventory Turnover, Low Stock, OOS, Dead Stock.
+- Per-store metric cards: Revenue, Profit, Orders, Units, AOV, Margin, Channel split (Online%/MobileApp%/Physical%), Inventory Value, Inventory Turnover, Low Stock, OOS, Dead Stock. **Known issue:** The controller filters for `"Mobile"` to compute mobile channel revenue; the stored value is `"MobileApp"`, so Mobile% is always 0 in this view.
 - Prior-period comparisons for Revenue, Margin, and AOV per store.
 - 6 auto-generated cross-store Smart Insights: revenue leader and gap, margin leader, highest AOV store, best inventory turnover, highest-risk store (OOS+lowStock+deadStock aggregate), channel dominance differences.
 
@@ -1136,7 +1138,7 @@ The `AccountController` builds a `ClaimsIdentity` with typed claims (`ClaimTypes
 The `StoreSyncBackgroundService` implements a delta (incremental) sync pattern: instead of fetching all historical orders on every cycle, it uses the `LastSyncAt` cursor to fetch only records created after the last successful sync. This keeps the sync cycle fast even as the dataset grows.
 
 ### In-Memory Aggregation Pattern
-Analytics services perform a single DB query to load raw data, then compute all derived metrics in-memory using LINQ. This trades memory usage for simplicity — avoiding complex multi-join SQL queries that are hard to debug and maintain. The data volumes for a single-store, 18-month simulation are well within the memory budget of a modern machine.
+Analytics services perform a single DB query to load raw data, then compute all derived metrics in-memory using LINQ. This trades memory usage for simplicity — avoiding complex multi-join SQL queries that are hard to debug and maintain. The data volumes for a 24-month, three-store simulation are well within the memory budget of a modern machine.
 
 ### Subprocess Integration Pattern
 `ForecastingService` invokes the Python ML script via `System.Diagnostics.Process.Start()`. stdout/stderr are redirected and captured. The calling code awaits process completion with a `CancellationTokenSource`-based 5-minute timeout. This is the standard .NET pattern for integrating external command-line tools into a web application.
@@ -1172,10 +1174,12 @@ Analytics services perform a single DB query to load raw data, then compute all 
 
 **Why:** The Python ML script takes 30–120 seconds to run depending on the data volume. Running it automatically on a schedule would either consume significant server resources during demos or require complex scheduling infrastructure. Manual triggering gives the demonstrator full control over when forecasts are generated during a live presentation.
 
-### Decision 6: DDL Over EF Core Migrations for Forecast Tables
-**What was decided:** The three forecast tables are created via raw `IF NOT EXISTS CREATE TABLE` DDL statements in `Program.cs` at startup, rather than via EF Core migrations.
+### Decision 6: DDL for Forecast Tables in the Analytics App
+**What was decided:** The three forecast tables (`ForecastResults`, `ForecastAccuracies`, `ForecastFeatureImportances`) are created via raw `IF NOT EXISTS CREATE TABLE` DDL statements in `FashionDataAnalysisPlatform/Program.cs` at startup. The `FashionStoreAPI`, by contrast, uses EF Core migrations for all schema changes.
 
-**Why:** The forecasting module was added after the initial database schema was deployed. EF Core's `EnsureCreated()` method does not support adding new tables to an existing database (it only creates the schema if the database does not exist). Rather than switching to migrations (which would require creating a migration file and running `dotnet ef database update`), the simpler approach of idempotent DDL was used. This is a pragmatic thesis decision; in a production system, migrations would be the correct approach.
+**Why:** The forecasting module was added to `FashionDataAnalysisPlatform` after its initial schema was deployed via `EnsureCreated()`. Because `EnsureCreated()` only creates the full schema when the database is absent (it cannot add tables to an existing database), and switching the analytics app to migrations would have required generating migration files and coordinating `dotnet ef database update` steps, idempotent raw DDL was used instead. This is a pragmatic thesis decision; in a production system, EF Core migrations would be the correct approach for both components.
+
+**Important:** The `ModelName` column on `ForecastResults` and `ForecastAccuracies` is **not** present in the C# DDL in `Program.cs`. It is added by the Python script's `ensure_tables()` function via `ALTER TABLE` on first forecast run. These tables reach their final described schema only after at least one forecast generation has been triggered.
 
 ### Decision 7: Hardcoded Season End Dates
 **What was decided:** Season end dates (AW24 → 2025-03-01, SS25 → 2025-09-01, AW25 → 2026-03-01, SS26 → 2026-09-01) are hardcoded in `SustainabilityService.SeasonEnds` and `NotificationService.ExpiredSeasons`.
@@ -1196,7 +1200,7 @@ Analytics services perform a single DB query to load raw data, then compute all 
 
 5. **ODBC Driver dependency:** The Python ML script connects to SQL Server LocalDB via `ODBC Driver 17 for SQL Server`. This driver must be installed separately on the machine. The connection string in `ml/config.json` is hardcoded to the specific LocalDB instance name; it must be updated for different environments.
 
-6. **No real-time push:** The dashboard's "live" updates are implemented via polling (`setInterval` every 10 seconds). This is not true real-time push (WebSockets, Server-Sent Events). For a thesis, polling is sufficient.
+6. **No real-time push:** The dashboard's "live" updates are implemented via polling (`setInterval` every 15 seconds). This is not true real-time push (WebSockets, Server-Sent Events). For a thesis, polling is sufficient.
 
 7. **No error recovery for partial sync:** If the sync cycle fails halfway through, the `LastSyncAt` cursor may or may not have been advanced depending on which step failed. This can cause orders to be re-fetched on the next cycle, which is handled by deduplication. However, a truly robust system would use a transactional cursor update.
 
@@ -1208,6 +1212,8 @@ Analytics services perform a single DB query to load raw data, then compute all 
 
 11. **Forecasting accuracy is constrained by the limited historical dataset (24 months).** Literature generally recommends at least 3 seasonal cycles for stable seasonal forecasting. The current implementation achieved 43.9% Revenue Accuracy (56.1% WMAPE) on the held-out test set, which spans the spring-to-summer seasonal transition — the most challenging forecast window given only one prior year of training data. The forecasting module should therefore be interpreted as directional decision support rather than precise demand prediction.
 
+12. **MobileApp channel naming inconsistency:** The data generator outputs `"MobileApp"` as the mobile sales channel identifier. `StoreComparisonController` filters by `s.Channel == "Mobile"` to compute mobile channel revenue, which never matches the stored value. As a result, the Mobile% column in the Store Comparison channel split chart is always 0. The Dashboard and Sales Analytics modules use a dynamic `GroupBy(SalesChannel)` and correctly display `"MobileApp"` as-is. To fix this, either the generator must output `"Mobile"` or the StoreComparison controller must be updated to filter for `"MobileApp"`.
+
 ---
 
 ## 19. Future Improvements
@@ -1216,7 +1222,7 @@ Analytics services perform a single DB query to load raw data, then compute all 
 
 2. **Scheduled forecast generation:** Add a Quartz.NET or hosted timer service that automatically triggers forecast regeneration on a nightly or weekly schedule.
 
-3. **WebSocket-based live updates:** Replace the 10-second polling mechanism with SignalR WebSockets to push sync events and KPI updates to the dashboard in real time.
+3. **WebSocket-based live updates:** Replace the 15-second polling mechanism with SignalR WebSockets to push sync events and KPI updates to the dashboard in real time.
 
 4. **Migration-based schema management:** Replace `EnsureCreated()` + raw DDL with EF Core migrations to support proper versioned schema evolution.
 
@@ -1256,11 +1262,11 @@ Analytics services perform a single DB query to load raw data, then compute all 
 ### What Was Delivered
 The final thesis submission includes a fully functional, deployed-locally application consisting of:
 
-**Three runnable components:**
+**Four runnable components:**
 1. `app/FashionStoreAPI` — ASP.NET Core Web API (.NET 8) running on `https://localhost:7151` with Swagger UI.
 2. `app/FashionDataAnalysisPlatform` — ASP.NET Core MVC Web App (.NET 8) running on `https://localhost:7000`.
-3. `data_generator/fashion_order_generator.py` — Python 3 script capable of seeding 18 months of historical orders and generating live orders.
-4. `ml/fashion_forecaster.py` — Python 3 ML script (invoked by the web app, not run independently in normal operation).
+3. `data_generator/fashion_order_generator.py` — Python 3 script capable of seeding 24 months of historical orders and generating live orders.
+4. `ml/fashion_forecaster.py` — Python 3 ML script (invoked by the web app via subprocess; not run independently in normal operation).
 
 **Three stores seeded:**
 - Scuffer District (Bucharest, Romania, Flagship) — ID 1 in FashionStoreApiDb.
@@ -1273,10 +1279,10 @@ The final thesis submission includes a fully functional, deployed-locally applic
 - 6 Scuffer Downtown exclusives.
 - 26 Maison Toulouse products.
 
-**Approximately 18 months of sales data:** Generated by the Python order generator in historical mode, covering July 2024 through approximately June 2026. The database contains many thousands of sale records across all three stores.
+**Approximately 24 months of sales data:** Generated by the Python order generator in historical mode, covering July 2024 through June 2026 (the submission date). The database contains many thousands of sale records across all three stores.
 
 **Analytics modules implemented and fully functional:**
-1. Executive Dashboard (with 10-second live refresh via LiveMetrics JSON endpoint)
+1. Executive Dashboard (with 15-second live refresh via LiveMetrics JSON endpoint)
 2. Sales Analytics
 3. Inventory Intelligence
 4. Store Comparison

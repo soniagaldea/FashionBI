@@ -9,16 +9,14 @@ namespace FashionDataAnalysisPlatform.Services
         private readonly AppDbContext _context;
         public SmartInsightsService(AppDbContext context) => _context = context;
 
-        // ── Flat projection types used in-memory only ──────────────────────
+        // Flat projection types used in-memory only
         private sealed record RSale(int ProductId, int StoreId, DateTime SaleDate,
             decimal Revenue, decimal Profit, int Quantity, string? Channel, int? OrderId);
         private sealed record RProd(int ProductId, string Name, string Code,
             string Category, decimal UnitPrice);
         private sealed record RInv(int ProductId, int StoreId, int Stock, int MinThreshold);
 
-        // ════════════════════════════════════════════════════════════════════
         // PUBLIC ENTRY POINT
-        // ════════════════════════════════════════════════════════════════════
         public async Task<SmartInsightsViewModel> BuildViewModelAsync(List<int> storeIds)
         {
             var vm = new SmartInsightsViewModel { LastRefreshedAt = DateTime.Now };
@@ -26,7 +24,7 @@ namespace FashionDataAnalysisPlatform.Services
             // Fixed 24-month window — long enough for SPC baselines and ABC/XYZ classification
             var cutoff = DateTime.Today.AddMonths(-24);
 
-            // ── Sales query — optional store filter ───────────────────────
+            // Sales query — optional store filter 
             var salesQuery = _context.Sales.AsNoTracking()
                 .Where(s => s.SaleDate >= cutoff && s.StoreId != null);
 
@@ -89,7 +87,7 @@ namespace FashionDataAnalysisPlatform.Services
                 forecastAccuracy = revAcc?.AccuracyPercent ?? 50m;
             }
 
-            // ── Build all four sections ───────────────────────────────────
+            // Build all four sections 
             BuildHealthScore(vm, sales, inventories, forecastAccuracy);
             BuildStrategicActions(vm, sales, inventories, products, forecasts,
                 forecastAccuracy, storeMap);
@@ -107,9 +105,7 @@ namespace FashionDataAnalysisPlatform.Services
             return vm;
         }
 
-        // ════════════════════════════════════════════════════════════════════
         // SECTION 1 — BUSINESS HEALTH SCORE
-        // ════════════════════════════════════════════════════════════════════
         private static void BuildHealthScore(
             SmartInsightsViewModel vm,
             List<RSale> sales,
@@ -121,7 +117,7 @@ namespace FashionDataAnalysisPlatform.Services
             var prev12Start       = currentMonthStart.AddMonths(-12);
             var prev3Start        = currentMonthStart.AddMonths(-3);
 
-            // ── Revenue score (0–25) ────────────────────────────────────
+            // Revenue score (0–25) 
             var historicMonthlyRevenues = sales
                 .Where(s => s.SaleDate >= prev12Start && s.SaleDate < currentMonthStart)
                 .GroupBy(s => new { s.SaleDate.Year, s.SaleDate.Month })
@@ -141,7 +137,7 @@ namespace FashionDataAnalysisPlatform.Services
             string revLabel  = revRatio >= 1.1 ? "Above Trend" : revRatio >= 0.85 ? "On Track" : "Below Trend";
             string revDetail = $"Current month: €{currentRevenue:N0} vs €{avgMonthly:N0} 12-month avg";
 
-            // ── Profitability score (0–25) ──────────────────────────────
+            // Profitability score (0–25) 
             var last3m   = sales.Where(s => s.SaleDate >= prev3Start).ToList();
             decimal rev3 = last3m.Sum(s => s.Revenue);
             decimal prf3 = last3m.Sum(s => s.Profit);
@@ -151,7 +147,7 @@ namespace FashionDataAnalysisPlatform.Services
             string profLabel  = margin >= 25m ? "Strong" : margin >= 15m ? "Adequate" : "Weak";
             string profDetail = $"3-month profit margin: {margin:N1}% (benchmark: 25%)";
 
-            // ── Inventory score (0–25) ──────────────────────────────────
+            // Inventory score (0–25) 
             int total    = inventories.Count;
             int healthy  = inventories.Count(i => i.Stock > i.MinThreshold);
             int oos      = inventories.Count(i => i.Stock == 0);
@@ -160,7 +156,7 @@ namespace FashionDataAnalysisPlatform.Services
             string invLabel  = invScore >= 20 ? "Healthy" : invScore >= 12 ? "Monitor" : "At Risk";
             string invDetail = $"{healthy}/{total} SKUs above threshold · {oos} out of stock";
 
-            // ── Forecast score (0–25) ───────────────────────────────────
+            // Forecast score (0–25) 
             int    fcastScore  = forecastAccuracy > 0
                 ? (int)Math.Min(25, (double)forecastAccuracy / 100.0 * 25.0) : 12;
             string fcastLabel  = forecastAccuracy >= 70 ? "High Confidence"
@@ -171,7 +167,7 @@ namespace FashionDataAnalysisPlatform.Services
                 ? $"Best model accuracy: {forecastAccuracy:N1}%"
                 : "No forecasts generated yet — run the Forecasting module";
 
-            // ── Composite ──────────────────────────────────────────────
+            // Composite 
             int score = revScore + profScore + invScore + fcastScore;
 
             vm.RevenueScore       = revScore;
@@ -206,9 +202,7 @@ namespace FashionDataAnalysisPlatform.Services
                   "Continue monitoring for early signals of change.";
         }
 
-        // ════════════════════════════════════════════════════════════════════
         // SECTION 2 — STRATEGIC ACTION BOARD
-        // ════════════════════════════════════════════════════════════════════
         private static void BuildStrategicActions(
             SmartInsightsViewModel vm,
             List<RSale> sales,
@@ -222,7 +216,7 @@ namespace FashionDataAnalysisPlatform.Services
             var cur3Start = new DateTime(today.Year, today.Month, 1).AddMonths(-3);
             var prv3Start = cur3Start.AddMonths(-3);
 
-            // ── Pre-compute category metrics (single pass each) ─────────
+            // Pre-compute category metrics (single pass each) 
             var catCur = sales
                 .Where(s => s.SaleDate >= cur3Start && products.ContainsKey(s.ProductId))
                 .GroupBy(s => products[s.ProductId].Category)
@@ -241,7 +235,7 @@ namespace FashionDataAnalysisPlatform.Services
             decimal networkProfCur = catCur.Values.Sum(x => x.Profit);
             decimal networkMargin  = networkRevCur > 0 ? networkProfCur / networkRevCur * 100m : 0m;
 
-            // ── Inventory per (storeId, category) ──────────────────────
+            // Inventory per (storeId, category) 
             var avgPriceByCat = products.Values
                 .GroupBy(p => p.Category)
                 .ToDictionary(g => g.Key, g => g.Average(p => p.UnitPrice));
@@ -261,7 +255,7 @@ namespace FashionDataAnalysisPlatform.Services
 
             var urgentCombos = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            // ── URGENT 1: Inventory gaps from forecast ──────────────────
+            // URGENT 1: Inventory gaps from forecast
             if (forecasts.Any())
             {
                 var fByCombo = forecasts
@@ -309,7 +303,7 @@ namespace FashionDataAnalysisPlatform.Services
                 }
             }
 
-            // ── URGENT 2: OOS with recent sales velocity ────────────────
+            // URGENT 2: OOS with recent sales velocity 
             var recentCutoff = today.AddDays(-30);
             var recentByProd = sales
                 .Where(s => s.SaleDate >= recentCutoff)
@@ -347,7 +341,7 @@ namespace FashionDataAnalysisPlatform.Services
                 });
             }
 
-            // ── OPPORTUNITY 1: High forecast growth + adequate stock ─────
+            // OPPORTUNITY 1: High forecast growth + adequate stock 
             if (forecasts.Any())
             {
                 var fRevByCombo = forecasts
@@ -391,7 +385,7 @@ namespace FashionDataAnalysisPlatform.Services
                 }
             }
 
-            // ── OPPORTUNITY 2: Fastest-growing category (actual trend) ───
+            // OPPORTUNITY 2: Fastest-growing category (actual trend) 
             foreach (var cat in catCur.Keys.OrderByDescending(c => catCur[c].Revenue))
             {
                 if (!catPrev.TryGetValue(cat, out var prev) || prev <= 0) continue;
@@ -418,7 +412,7 @@ namespace FashionDataAnalysisPlatform.Services
                 break;
             }
 
-            // ── OPPORTUNITY 3: High-AOV underweighted channel ───────────
+            // OPPORTUNITY 3: High-AOV underweighted channel
             var chanMetrics = sales
                 .Where(s => s.SaleDate >= cur3Start && !string.IsNullOrEmpty(s.Channel))
                 .GroupBy(s => s.Channel!)
@@ -458,7 +452,7 @@ namespace FashionDataAnalysisPlatform.Services
                 break;
             }
 
-            // ── OPTIMIZE 1: Overstock ────────────────────────────────────
+            // OPTIMIZE 1: Overstock
             if (forecasts.Any())
             {
                 var fUnitsByCombo = forecasts
@@ -496,7 +490,7 @@ namespace FashionDataAnalysisPlatform.Services
                 }
             }
 
-            // ── OPTIMIZE 2: Margin erosion by category ───────────────────
+            // OPTIMIZE 2: Margin erosion by category
             foreach (var cat in catCur.Keys)
             {
                 var d = catCur[cat];
@@ -525,7 +519,7 @@ namespace FashionDataAnalysisPlatform.Services
                 });
             }
 
-            // ── MONITOR 1: Declining category trend ─────────────────────
+            // MONITOR 1: Declining category trend
             foreach (var cat in catCur.Keys.OrderByDescending(c => catCur[c].Revenue))
             {
                 if (!catPrev.TryGetValue(cat, out var prev) || prev <= 0) continue;
@@ -550,7 +544,7 @@ namespace FashionDataAnalysisPlatform.Services
                 });
             }
 
-            // ── MONITOR 2: Low-stock below threshold (not OOS) ──────────
+            // MONITOR 2: Low-stock below threshold (not OOS) 
             int warnSkus = inventories.Count(i => i.Stock > 0 && i.Stock <= i.MinThreshold);
             if (warnSkus > 0)
             {
@@ -569,16 +563,14 @@ namespace FashionDataAnalysisPlatform.Services
                 });
             }
 
-            // ── Sort each category by impact descending and cap ─────────
+            // Sort each category by impact descending and cap 
             vm.UrgentActions      = urgent.OrderByDescending(a => a.EstimatedImpact).Take(6).ToList();
             vm.OpportunityActions = opportunity.OrderByDescending(a => a.EstimatedImpact).Take(6).ToList();
             vm.OptimizeActions    = optimize.OrderByDescending(a => a.EstimatedImpact).Take(6).ToList();
             vm.MonitorActions     = monitor.OrderByDescending(a => a.EstimatedImpact).Take(6).ToList();
         }
 
-        // ════════════════════════════════════════════════════════════════════
         // SECTION 3 — KPI EXCEPTION DETECTION
-        // ════════════════════════════════════════════════════════════════════
         private static void BuildKpiExceptions(
             SmartInsightsViewModel vm,
             List<RSale> sales,
@@ -592,12 +584,12 @@ namespace FashionDataAnalysisPlatform.Services
 
             var exceptions = new List<KpiException>();
 
-            // ── Pre-aggregate: (storeId, year, month) → revenue ────────
+            // Pre-aggregate: (storeId, year, month) → revenue 
             var storeMthRev = windowSales
                 .GroupBy(s => (s.StoreId, s.SaleDate.Year, s.SaleDate.Month))
                 .ToDictionary(g => g.Key, g => g.Sum(x => x.Revenue));
 
-            // ── Pre-aggregate: (category, year, month) → revenue + profit
+            // Pre-aggregate: (category, year, month) → revenue + profit
             var catMthData = windowSales
                 .Where(s => products.ContainsKey(s.ProductId))
                 .GroupBy(s => (Cat: products[s.ProductId].Category,
@@ -606,7 +598,7 @@ namespace FashionDataAnalysisPlatform.Services
                     Revenue: g.Sum(x => x.Revenue),
                     Profit:  g.Sum(x => x.Profit)));
 
-            // ── Revenue anomaly by store ────────────────────────────────
+            // Revenue anomaly by store 
             foreach (var (storeId, storeName) in storeMap)
             {
                 var baseline = Enumerable.Range(1, 11)
@@ -648,7 +640,7 @@ namespace FashionDataAnalysisPlatform.Services
                 });
             }
 
-            // ── Revenue anomaly by category ─────────────────────────────
+            // Revenue anomaly by category 
             var allCats = products.Values.Select(p => p.Category).Distinct();
 
             foreach (var cat in allCats)
@@ -692,7 +684,7 @@ namespace FashionDataAnalysisPlatform.Services
                 });
             }
 
-            // ── Margin anomaly by category ──────────────────────────────
+            // Margin anomaly by category
             foreach (var cat in allCats)
             {
                 var baselineMargins = Enumerable.Range(1, 11)
@@ -746,9 +738,7 @@ namespace FashionDataAnalysisPlatform.Services
                 .ToList();
         }
 
-        // ════════════════════════════════════════════════════════════════════
         // SECTION 4 — ABC/XYZ PORTFOLIO MATRIX
-        // ════════════════════════════════════════════════════════════════════
         private static void BuildAbcXyz(
             SmartInsightsViewModel vm,
             List<RSale> sales,
@@ -758,7 +748,7 @@ namespace FashionDataAnalysisPlatform.Services
             var cutoff   = sales.Max(s => s.SaleDate).AddMonths(-12);
             var sales12m = sales.Where(s => s.SaleDate >= cutoff).ToList();
 
-            // ── Revenue per product (ABC) ───────────────────────────────
+            // Revenue per product (ABC) 
             var prodRevenue = sales12m
                 .GroupBy(s => s.ProductId)
                 .ToDictionary(g => g.Key, g => g.Sum(x => x.Revenue));
@@ -768,19 +758,19 @@ namespace FashionDataAnalysisPlatform.Services
                 if (!prodRevenue.ContainsKey(pid))
                     prodRevenue[pid] = 0m;
 
-            // ── Monthly revenue per product (XYZ) ──────────────────────
+            // Monthly revenue per product (XYZ)
             var prodMonthly = sales12m
                 .GroupBy(s => new { s.ProductId, s.SaleDate.Year, s.SaleDate.Month })
                 .Select(g => new { g.Key.ProductId, Revenue = g.Sum(x => x.Revenue) })
                 .GroupBy(x => x.ProductId)
                 .ToDictionary(g => g.Key, g => g.Select(x => x.Revenue).ToList());
 
-            // ── Inventory per product (for drill-down display) ──────────
+            // Inventory per product (for drill-down display)
             var stockByProd = inventories
                 .GroupBy(i => i.ProductId)
                 .ToDictionary(g => g.Key, g => g.Sum(x => x.Stock));
 
-            // ── ABC classification ──────────────────────────────────────
+            // ABC classification 
             decimal totalRev = prodRevenue.Values.Sum();
             var     sorted   = prodRevenue.OrderByDescending(kv => kv.Value).ToList();
             var     abcClass = new Dictionary<int, string>();
@@ -795,7 +785,7 @@ namespace FashionDataAnalysisPlatform.Services
                 cumul += kv.Value;
             }
 
-            // ── XYZ classification ──────────────────────────────────────
+            // XYZ classification
             var xyzClass = new Dictionary<int, (string Cls, double Cv)>();
             foreach (var pid in prodRevenue.Keys)
             {
@@ -812,7 +802,7 @@ namespace FashionDataAnalysisPlatform.Services
                 xyzClass[pid] = cv <= 0.3 ? ("X", cv) : cv <= 0.6 ? ("Y", cv) : ("Z", cv);
             }
 
-            // ── Build 3×3 matrix ────────────────────────────────────────
+            // Build 3×3 matrix
             var keys = new[] { "AX", "AY", "AZ", "BX", "BY", "BZ", "CX", "CY", "CZ" };
 
             var (labels, bgs, texts, recs) = GetMatrixMeta();
@@ -865,7 +855,7 @@ namespace FashionDataAnalysisPlatform.Services
             vm.TotalPortfolioRevenue = Math.Round(totalRev, 2);
         }
 
-        // ── Matrix labels/colours/recommendations ─────────────────────────
+        // Matrix labels/colours/recommendations
         private static (Dictionary<string, string> Labels,
                         Dictionary<string, string> Bgs,
                         Dictionary<string, string> Texts,
@@ -901,7 +891,7 @@ namespace FashionDataAnalysisPlatform.Services
             return (L, B, T, R);
         }
 
-        // ── Helper: population standard deviation ─────────────────────────
+        // Helper: population standard deviation
         private static double StdDev(IEnumerable<double> values)
         {
             var list = values.ToList();
