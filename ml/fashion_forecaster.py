@@ -47,10 +47,7 @@ FEATURE_COLS_ORIGINAL = [
     "is_summer", "is_winter",
 ]
 
-# Extended 18-feature set — adds YoY lags and a binary flag that tells the
-# model which rows have genuine prior-year data (months 1-12 of a 24-month
-# window have no real YoY observation; the flag lets the RF branch cleanly
-# between "no prior history" and "true YoY value").
+# Extended 18-feature set — adds YoY lags and a binary flag that tells the model which rows have genuine prior-year data.
 FEATURE_COLS = FEATURE_COLS_ORIGINAL + [
     "lag_12_revenue", "lag_12_orders", "lag_12_units",
     "lag_12_available",

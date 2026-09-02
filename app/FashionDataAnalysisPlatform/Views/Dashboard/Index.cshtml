@@ -488,7 +488,7 @@
 <script>
 (function () {
 
-    // ── Design tokens ───────────────────────────────────────────────
+    // Design tokens
     const C_INDIGO  = '#5b5fc7';
     const C_EMERALD = '#10b981';
     const C_AMBER   = '#f59e0b';
@@ -507,7 +507,7 @@
     Chart.defaults.font.size   = 12;
     Chart.defaults.color       = TEXT_MUTED;
 
-    // ── Server-rendered initial data ────────────────────────────────
+    // Server-rendered initial data
     const trendLabels      = @Html.Raw(ViewBag.TrendLabels      ?? "[]");
     const trendRevenue     = @Html.Raw(ViewBag.TrendRevenue     ?? "[]");
     const trendProfit      = @Html.Raw(ViewBag.TrendProfit      ?? "[]");
@@ -519,16 +519,16 @@
     const chanRevenue      = @Html.Raw(ViewBag.ChannelRevenue   ?? "[]");
     const topProducts      = @Html.Raw(ViewBag.TopProducts      ?? "[]");
 
-    // ── Shared axis/grid options ────────────────────────────────────
+    // Shared axis/grid options 
     const gridOpts = { color: BORDER_CLR, lineWidth: 1, drawBorder: false };
     const tickOpts = { color: TEXT_MUTED, font: { size: 11 } };
 
-    // ── Chart instances (kept for in-place live update) ─────────────
+    // Chart instances (kept for in-place live update) 
     let revenueTrendChartInst  = null;
     let channelChartInst       = null;
     let profitabilityChartInst = null;
 
-    // ── Utility helpers ─────────────────────────────────────────────
+    // Utility helpers 
     function setText(id, val) {
         const el = document.getElementById(id);
         if (el) el.textContent = val;
@@ -541,7 +541,7 @@
     function fmt1(n) { return n.toLocaleString('en', { minimumFractionDigits: 1, maximumFractionDigits: 1 }); }
     function fmt2(n) { return n.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
-    // ── Revenue Trend ────────────────────────────────────────────────
+    // Revenue Trend 
     const trendCtx = document.getElementById('revenueTrendChart');
     if (trendCtx && trendLabels.length) {
         const n             = trendLabels.length;
@@ -579,7 +579,7 @@
         });
     }
 
-    // ── Top Performing Products ──────────────────────────────────────
+    // Top Performing Products
     function renderTopProducts(products) {
         const el = document.getElementById('topProductsTbody');
         if (!el || !products.length) return;
@@ -598,7 +598,7 @@
     }
     renderTopProducts(topProducts);
 
-    // ── Sales Channel Distribution ───────────────────────────────────
+    // Sales Channel Distribution
     function buildChannelLegend(labels, values, colors) {
         const el = document.getElementById('channelLegend');
         if (!el) return;
@@ -634,7 +634,7 @@
         buildChannelLegend(chanLabels, chanRevenue, chanColors);
     }
 
-    // ── Profitability by Category ────────────────────────────────────
+    // Profitability by Category 
     const profCtx = document.getElementById('profitabilityChart');
     if (profCtx && catLabels.length) {
         profitabilityChartInst = new Chart(profCtx, {
@@ -665,14 +665,14 @@
         });
     }
 
-    // ── Date range navigation ────────────────────────────────────────
+    // Date range navigation 
     window.setDateRange = function (range) {
         const url = new URL(window.location.href);
         url.searchParams.set('dateRange', range);
         window.location.href = url.toString();
     };
 
-    // ── Live badge helpers ───────────────────────────────────────────
+    // Live badge helpers 
     function setBadgeLive(sec) {
         const badge = document.getElementById('liveBadge');
         if (badge) badge.classList.remove('live-badge--delayed');
@@ -693,7 +693,7 @@
         setText('liveUnit',      '');
     }
 
-    // ── Dashboard update functions ───────────────────────────────────
+    // Dashboard update functions 
     function updateKpis(d) {
         setText('kv-revenue',  '€' + fmt0(d.totalRevenue));
         setText('kv-orders',   fmt0(d.totalOrders));
@@ -770,7 +770,7 @@
         updateAlerts(d.alerts);
     }
 
-    // ── Live refresh every 15 s ─────────────────────────────────
+    // Live refresh every 15 s 
     const REFRESH_INTERVAL = 15;
     let countdown  = REFRESH_INTERVAL;
     let isFetching = false;
