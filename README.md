@@ -128,3 +128,44 @@ The project explores how Business Intelligence, machine learning and software en
 
 It was developed as my Bachelor's thesis:
 **Fashion Retail Data Analysis Platform**
+
+## Getting Started
+
+### Prerequisites
+
+Make sure you have the following installed:
+
+- .NET 8 SDK
+- SQL Server LocalDB
+- Python 3
+- Python packages listed in `requirements.txt`
+
+Install the required Python packages with:
+
+```bash
+pip install -r requirements.txt
+```
+
+### Running the Project
+
+1. Clone the repository.
+2. Open the solution in Visual Studio or another compatible IDE.
+3. Make sure SQL Server LocalDB is available.
+4. Start the transactional API from `app/FashionStoreAPI`.
+5. Start the BI application from `app/FashionDataAnalysisPlatform`.
+6. Run the Python forecasting script when forecasting functionality is required:
+
+```bash
+python ml/fashion_forecaster.py
+```
+
+7. Open the application and sign in using the demo credentials.
+
+### Demo Credentials
+
+```text
+Email: demo@fashionbi.local
+Password: DemoPassword123!
+```
+
+These credentials are provided exclusively for demonstration purposes.
