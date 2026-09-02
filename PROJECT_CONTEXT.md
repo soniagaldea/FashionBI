@@ -97,7 +97,7 @@ The following functional requirements were implemented in the final submission:
 
 **FR-06:** The Inventory Intelligence module shall display total SKU count, units on hand, inventory value, low-stock count, out-of-stock count, weeks of cover, sell-through rate, stock-to-sales ratio, inventory turnover, and overstock count. The module shall include a low-stock alert table, dead stock table (90+ days no sales), inventory aging histogram, and reorder priority classification.
 
-**FR-07:** The Store Comparison module shall provide side-by-side metrics for all active stores including revenue, profit, orders, units, AOV, margin, channel split (Online/MobileApp/Physical), inventory value, inventory turnover, low-stock count, OOS count, and dead stock count. Automatically generated cross-store insights shall be displayed. Note: `StoreComparisonController` filters by the string `"Mobile"` for the mobile channel, which does not match the stored value `"MobileApp"` — mobile channel revenue in the Store Comparison view is therefore reported as 0.
+**FR-07:** The Store Comparison module shall provide side-by-side metrics for all active stores including revenue, profit, orders, units, AOV, margin, channel split (Online/MobileApp/Physical), inventory value, inventory turnover, low-stock count, OOS count, and dead stock count. Automatically generated cross-store insights shall be displayed.
 
 **FR-08:** The Forecasting module shall generate 3-month demand forecasts at the Store × Category level. The system shall compare three models (Naive Baseline, Holt-Winters, Random Forest) on a held-out test set and select the best by Revenue WMAPE. Forecasts shall be triggered manually by the user. The module shall display actual vs forecast chart with confidence bands, forecast accuracy metrics (MAE, RMSE, WMAPE, Accuracy%), feature importance chart, inventory risk alerts, year-over-year comparison, and a Strategic Outlook section.
 
@@ -328,7 +328,6 @@ Each module has a dedicated Razor `.cshtml` view that renders data passed via `V
 #### Order
 - **Purpose:** Represents a customer purchase transaction.
 - **Fields:** `OrderId` (PK), `StoreId` (FK → Store), `OrderDate`, `TotalAmount`, `CustomerId` (nullable, GUID string), `SalesChannel` ("Online", "MobileApp", "Physical").
-- **Note:** The generator stores `"MobileApp"` as the mobile channel identifier (not `"Mobile"`). The three canonical values in the database are `"Online"`, `"MobileApp"`, and `"Physical"`. The `StoreComparisonController` contains a hardcoded filter for `"Mobile"` which does not match the stored value; the mobile channel split in Store Comparison therefore returns 0. This is a known implementation inconsistency.
 - **Relationships:** One-to-many with OrderItem.
 
 #### OrderItem
@@ -511,7 +510,7 @@ DashboardController, SalesController, InventoriesController, StoreComparisonCont
 **Inputs:** Date range selector. No store filter (shows all stores by design).
 
 **Outputs:**
-- Per-store metric cards: Revenue, Profit, Orders, Units, AOV, Margin, Channel split (Online%/MobileApp%/Physical%), Inventory Value, Inventory Turnover, Low Stock, OOS, Dead Stock. **Known issue:** The controller filters for `"Mobile"` to compute mobile channel revenue; the stored value is `"MobileApp"`, so Mobile% is always 0 in this view.
+- Per-store metric cards: Revenue, Profit, Orders, Units, AOV, Margin, Channel split (Online%/MobileApp%/Physical%), Inventory Value, Inventory Turnover, Low Stock, OOS, Dead Stock.
 - Prior-period comparisons for Revenue, Margin, and AOV per store.
 - 6 auto-generated cross-store Smart Insights: revenue leader and gap, margin leader, highest AOV store, best inventory turnover, highest-risk store (OOS+lowStock+deadStock aggregate), channel dominance differences.
 
@@ -1211,8 +1210,6 @@ Analytics services perform a single DB query to load raw data, then compute all 
 10. **SyncNow does not immediately sync:** The "Sync Now" button in Store Connections updates `LastSyncAt` but does not directly invoke the sync pipeline. The actual sync happens on the background service's next 5-second poll. There is a potential delay of up to 5 seconds between clicking "Sync Now" and data appearing.
 
 11. **Forecasting accuracy is constrained by the limited historical dataset (24 months).** Literature generally recommends at least 3 seasonal cycles for stable seasonal forecasting. The current implementation achieved 43.9% Revenue Accuracy (56.1% WMAPE) on the held-out test set, which spans the spring-to-summer seasonal transition — the most challenging forecast window given only one prior year of training data. The forecasting module should therefore be interpreted as directional decision support rather than precise demand prediction.
-
-12. **MobileApp channel naming inconsistency:** The data generator outputs `"MobileApp"` as the mobile sales channel identifier. `StoreComparisonController` filters by `s.Channel == "Mobile"` to compute mobile channel revenue, which never matches the stored value. As a result, the Mobile% column in the Store Comparison channel split chart is always 0. The Dashboard and Sales Analytics modules use a dynamic `GroupBy(SalesChannel)` and correctly display `"MobileApp"` as-is. To fix this, either the generator must output `"Mobile"` or the StoreComparison controller must be updated to filter for `"MobileApp"`.
 
 ---
 
